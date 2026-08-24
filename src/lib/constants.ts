@@ -274,6 +274,190 @@ export function checkUtilizationInvariant(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Sheet and header discovery thresholds                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Minimum share of a row's cells that must be non-empty strings for it to be
+ * considered the header row.
+ *
+ * The sample's header is 27 non-empty strings across a 29-wide range — 93%,
+ * comfortably clear. The two empty trailing cells are exactly the kind of slack
+ * this threshold exists to tolerate.
+ */
+export const HEADER_STRING_DENSITY_THRESHOLD = 0.7;
+
+/**
+ * Distinct types the row below the header must show to corroborate detection.
+ *
+ * A header row is strings; a data row under it is usually a mix of strings and
+ * numbers. Requiring two distinct types stops a second row of section labels
+ * from being mistaken for data — which would otherwise let the real header be
+ * skipped in favour of a title row.
+ */
+export const HEADER_CORROBORATION_MIN_TYPES = 2;
+
+/**
+ * How many rows below a candidate to scan before giving up on corroboration.
+ * Small on purpose: the corroborating row should be immediately below.
+ */
+export const HEADER_LOOKAHEAD_ROWS = 1;
+
+/** Rows scanned when searching for the header. Guards against a huge sheet. */
+export const HEADER_SEARCH_MAX_ROWS = 25;
+
+/* -------------------------------------------------------------------------- */
+/* Role inference thresholds                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Share of populated cells that must coerce to a finite number for a column to
+ * be a measure.
+ *
+ * Below 1.0 on purpose: a production measure column with a few "TBD" or "N/A"
+ * cells is still a measure, and demoting it over a handful of stray strings
+ * would drop it out of the choropleth entirely. All seven measure columns in
+ * the sample parse at 1.0.
+ */
+export const MEASURE_NUMERIC_RATIO_THRESHOLD = 0.8;
+
+/**
+ * Cardinality ratio at or above which a dimension is flagged high-cardinality.
+ *
+ * IMPORTANT — this flag governs how a dimension is *offered*, not whether it is
+ * one. A column at 95% distinct is a poor default grouping (124 legend entries
+ * is not a choropleth) but it is still filterable and still belongs on the
+ * table axis.
+ *
+ * This is a deliberate departure from a literal reading of the brief, which
+ * demoted such columns to `meta`. Applied that way to this file it reclassifies
+ * District (62% distinct) as meta — and District is the single most important
+ * grouping in the app, the one the choropleth is built on. Site and Village go
+ * with it. The threshold is retained here as a UI hint, which is the job it can
+ * actually do well.
+ */
+export const HIGH_CARDINALITY_RATIO = 0.4;
+
+/**
+ * Header keywords that mark an all-empty column as a measure.
+ *
+ * Matched against the normalized key as substrings, so `'circle rate'` hits on
+ * "rate" and `'market value tentative'` on "value".
+ *
+ * `'acer'` is in the list because the sample misspells "Acres" as "Acers" and
+ * CLAUDE.md forbids repairing headers during normalization. The typo is handled
+ * here, at the matching layer, where being wrong costs a mislabelled column
+ * rather than a corrupted key.
+ */
+export const MEASURE_HEADER_KEYWORDS = [
+  'acre',
+  'acer',
+  'area',
+  'rate',
+  'value',
+  'percentage',
+  'percent',
+  'amount',
+  'cost',
+  'price',
+] as const;
+
+/**
+ * Header keywords that mark an all-empty column as meta, checked BEFORE
+ * {@link MEASURE_HEADER_KEYWORDS}.
+ *
+ * Order matters. `'Purchase Date '` contains no measure keyword, but a column
+ * like "Valuation Date" contains "value" and would otherwise be called a
+ * measure. Dates, document flags, and file references are never aggregable, so
+ * they win the match.
+ */
+export const META_HEADER_KEYWORDS = [
+  'date',
+  'y/n',
+  'yes/no',
+  'doc',
+  'file',
+  'kmz',
+  'remark',
+  'comment',
+  'status',
+  'name',
+  'number',
+  'id',
+] as const;
+
+/* -------------------------------------------------------------------------- */
+/* Null-equivalent value tokens                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Strings that mean "no value" and must become `null`, never `0`.
+ *
+ * The distinction is not cosmetic. A `0` in a measure column is a real figure —
+ * `Private Lease` legitimately holds 0 across many rows of the sample, and
+ * `Forest` holds 0 on all but four. Coercing an empty cell to 0 would make an
+ * unrecorded area indistinguishable from a recorded absence, silently inflate
+ * the row count behind every average, and let the composition invariant pass on
+ * a row that should have been flagged as incomplete.
+ *
+ * Compared case-insensitively after {@link WHITESPACE_TO_NORMALIZE} handling and
+ * trimming. A bare `'-'` is a null token; `'-5'` is negative five, and the
+ * exact-match comparison is what keeps those apart.
+ */
+export const NULL_EQUIVALENT_TOKENS = [
+  '',
+  '-',
+  '--',
+  '---',
+  'na',
+  'n/a',
+  'n.a.',
+  'n.a',
+  'nil',
+  'none',
+  'null',
+  'nan',
+  '#n/a',
+  '#value!',
+  '#ref!',
+  '#div/0!',
+  'tbd',
+  'not applicable',
+  'not available',
+] as const;
+
+/**
+ * Symbols and unit words stripped from a measure cell before parsing.
+ *
+ * Ordered longest-first at use so `'acres'` is consumed before `'ac'` — matching
+ * the short form first would leave a trailing `'res'` and fail the parse.
+ */
+export const MEASURE_STRIP_TOKENS = [
+  'square metres',
+  'square meters',
+  'square feet',
+  'hectares',
+  'hectare',
+  'sq. ft.',
+  'sq ft',
+  'sq.m.',
+  'sq m',
+  'acres',
+  'acre',
+  'guntha',
+  'cents',
+  'cent',
+  'rs.',
+  'rs',
+  'inr',
+  'ha',
+  'ac',
+] as const;
+
+/** Currency symbols stripped from a measure cell before parsing. */
+export const CURRENCY_SYMBOLS = ['₹', '$', '€', '£', '¥'] as const;
+
+/* -------------------------------------------------------------------------- */
 /* Ingest expectations                                                         */
 /* -------------------------------------------------------------------------- */
 

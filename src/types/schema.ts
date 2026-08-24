@@ -85,20 +85,36 @@ export type ColumnRole = 'dimension' | 'measure' | 'meta';
 
 /** Why the inference engine chose the role it chose. Shown in the override UI. */
 export type RoleInferenceReason =
-  /** Numeric across every populated cell, and not a low-cardinality code. */
+  /** Over 80% of populated cells parsed as finite numbers. */
   | 'numeric-values'
-  /** Cardinality low enough relative to row count to be worth grouping by. */
+  /** String-typed, so groupable in principle. Cardinality is reported separately. */
+  | 'string-values'
+  /** Cardinality low enough relative to row count to be a good default grouping. */
   | 'low-cardinality'
-  /** Non-numeric and high-cardinality — carried, not aggregated. */
+  /** String-typed but near-unique — still a dimension, poor as a default grouping. */
   | 'high-cardinality-text'
   /** Parsed as dates. */
   | 'temporal-values'
   /** Only two populated values, or Y/N-shaped. */
   | 'boolean-like'
-  /** Entirely empty in this file, so nothing to infer from. See note below. */
+  /**
+   * A dense, gapless, strictly increasing integer sequence covering every row —
+   * a row counter, not a quantity. `Sr No` in the sample. Numeric, but summing
+   * it is meaningless, so it is demoted to `meta` rather than left a measure.
+   */
+  | 'serial-index'
+  /**
+   * Entirely empty, so the role came from header keywords alone. Always paired
+   * with {@link ColumnDescriptor.inferredFromNameOnly}.
+   */
+  | 'header-keyword'
+  /** Entirely empty and no keyword matched. See note below. */
   | 'empty-column'
   /** Header has no text at all (the sample has two such trailing columns). */
   | 'unnamed-column';
+
+/** The JS types observed among a column's populated cells. */
+export type CellPrimitiveType = 'string' | 'number' | 'boolean' | 'date';
 
 /**
  * A column discovered in the header row, plus the profile used to infer its role.
@@ -155,6 +171,37 @@ export interface ColumnDescriptor {
 
   /** True when `nullCount === rowCount`. Precomputed because the UI branches on it. */
   readonly isEmptyInSample: boolean;
+
+  /**
+   * True when the column held no data and the role came from header keywords
+   * alone — `Circle rate` is called a measure because of the word "rate", not
+   * because anything numeric was observed.
+   *
+   * The UI must show a caution badge on these. A keyword guess is a guess: a
+   * production `Circle rate` column could arrive holding "Zone A / Zone B"
+   * strings, and nothing in this file would have contradicted the guess.
+   */
+  readonly inferredFromNameOnly: boolean;
+
+  /** `distinctCount / populatedCount`. 0 for an empty column. */
+  readonly cardinalityRatio: number;
+
+  /**
+   * True when {@link cardinalityRatio} is at or above
+   * {@link import('@/lib/constants').HIGH_CARDINALITY_RATIO}.
+   *
+   * This flags a dimension as a poor *default* grouping — it does not demote it
+   * to `meta`. District is 62% distinct and is the single most important
+   * grouping in the app. Cardinality governs how a dimension is offered, not
+   * whether it is one.
+   */
+  readonly isHighCardinality: boolean;
+
+  /** Distinct JS types among populated cells, for the profile panel. */
+  readonly valueTypes: readonly CellPrimitiveType[];
+
+  /** Share of populated cells that coerced to a finite number. Drives `measure`. */
+  readonly numericParseRatio: number;
 
   /**
    * Up to a handful of distinct values, for the override UI's preview.
@@ -242,16 +289,26 @@ export interface RowWarning {
 }
 
 export type IngestWarningCode =
-  /** Sheet name was not the expected one; parser fell back. */
-  | 'unexpected-sheet-name'
+  /** More than one sheet held data; the densest was chosen. Offer the picker. */
+  | 'multiple-populated-sheets'
+  /** No row met the header thresholds; the first non-empty row was assumed. */
+  | 'header-row-fallback'
   /** Two headers normalized to the same key; the later one was suffixed. */
   | 'duplicate-normalized-key'
-  /** Header cell was blank — sample columns 27 and 28. */
+  /** Header cell was blank but the column held data, so it was kept and labelled. */
   | 'unnamed-column'
-  /** Rows dropped for having no `State`. */
+  /** Header cell blank and column empty — discarded as spreadsheet debris. */
+  | 'discarded-empty-columns'
+  /** Rows dropped for having no value in the location dimension. */
   | 'rows-dropped'
   /** No column could be inferred as a measure — the choropleth has nothing to ramp. */
-  | 'no-measure-columns';
+  | 'no-measure-columns'
+  /** Columns whose role came from header keywords alone. Needs user confirmation. */
+  | 'name-only-inference'
+  /** An invariant had no columns bound to it and could not run. */
+  | 'unbound-invariant'
+  /** Rows failed one of the two arithmetic invariants. */
+  | 'invariant-violations';
 
 /** A problem with the file as a whole rather than with one row. */
 export interface IngestWarning {
@@ -276,6 +333,95 @@ export interface DroppedRow {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Validation report                                                           */
+/* -------------------------------------------------------------------------- */
+
+/** The two arithmetic invariants from CLAUDE.md. */
+export type InvariantId = 'composition' | 'utilization';
+
+/**
+ * One invariant failure on one row.
+ *
+ * CLAUDE.md: "Surface violations as row-level warnings; do not silently correct
+ * them." This carries the discrepancy and nothing else — there is deliberately
+ * no field for a repaired value, so no consumer can mistake the report for a fix.
+ * Ingest never throws on a violation either; a file of 130 bad rows must still
+ * load, so the user can see what is wrong with it.
+ */
+export interface ValidationEntry {
+  /** Zero-based index into {@link ParsedWorkbook.records}. */
+  readonly rowIndex: number;
+  /** 1-based row in the source sheet, so the user can find it in Excel. */
+  readonly sourceRowNumber: number;
+  readonly invariant: InvariantId;
+  /** The stated total the components were checked against. */
+  readonly expected: number;
+  /** The sum actually computed from the component columns. */
+  readonly actual: number;
+  /** `actual - expected`. Signed, so the UI can show direction of drift. */
+  readonly delta: number;
+  /** Columns that fed the sum, for cell highlighting. */
+  readonly columns: readonly NormalizedKey[];
+}
+
+/** Every invariant failure in a workbook, plus what could not be checked. */
+export interface ValidationReport {
+  readonly entries: readonly ValidationEntry[];
+  /** Rows evaluated per invariant. Excludes rows skipped as indeterminate. */
+  readonly checkedByInvariant: Readonly<Record<InvariantId, number>>;
+  /**
+   * Rows skipped because a component or total was null.
+   *
+   * Distinguishing this from a violation matters: an unevaluable row is not a
+   * bad row. If a production file populates its measures unevenly, a large
+   * skipped count is the signal — reporting those as failures would bury the
+   * real ones.
+   */
+  readonly skippedByInvariant: Readonly<Record<InvariantId, number>>;
+  /** True when an invariant could not run at all because no column bound to it. */
+  readonly unboundInvariants: readonly InvariantId[];
+}
+
+/* -------------------------------------------------------------------------- */
+/* Sheet and header discovery                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A sheet scored for selection.
+ *
+ * The parser does not assume `Sheet2`. It scores every sheet by populated-cell
+ * count and picks the densest, then exposes the full list so the UI can offer a
+ * picker — an override is required, because a workbook can legitimately hold a
+ * summary sheet denser than its data sheet.
+ */
+export interface SheetCandidate {
+  readonly name: string;
+  /** Non-empty cells found. The selection score. */
+  readonly populatedCellCount: number;
+  readonly rowCount: number;
+  readonly columnCount: number;
+  /** Zero-based header row index, or `null` if none could be detected. */
+  readonly headerRowIndex: number | null;
+  /** True for the sheet the parser chose. */
+  readonly selected: boolean;
+}
+
+/** How the header row was located. */
+export interface HeaderDetection {
+  /** Zero-based index into the sheet matrix. Row 1 in Excel terms is 0 here. */
+  readonly rowIndex: number;
+  /** Share of cells in that row that were non-empty strings. */
+  readonly stringDensity: number;
+  /** Distinct types seen in the row below — the corroborating signal. */
+  readonly rowBelowTypes: readonly CellPrimitiveType[];
+  /**
+   * True when detection fell back to the first non-empty row because no row met
+   * the thresholds. The UI should let the user pick the header row by hand.
+   */
+  readonly usedFallback: boolean;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Parsed workbook                                                             */
 /* -------------------------------------------------------------------------- */
 
@@ -288,21 +434,33 @@ export interface IngestStats {
   readonly droppedRowCount: number;
   /** Records carrying at least one {@link RowWarning}. */
   readonly recordsWithWarnings: number;
+  /** Columns kept. Excludes debris columns that had neither header nor data. */
   readonly columnCount: number;
   readonly emptyColumnCount: number;
+  /** Effective-role tallies, for the ingest summary. */
+  readonly measureCount: number;
+  readonly dimensionCount: number;
+  readonly metaCount: number;
+  /** Columns whose role came from a header keyword and needs confirming. */
+  readonly nameOnlyInferenceCount: number;
 }
 
 /** The result of parsing one uploaded workbook. */
 export interface ParsedWorkbook {
-  /** Sheet actually read. The sample's data lives on `Sheet2`, not `Sheet1`. */
+  /** Sheet actually read. Chosen by density, not by name. */
   readonly sheetName: string;
-  /** Every sheet in the file, so the UI can offer a switcher. */
-  readonly availableSheets: readonly string[];
+  /** Every sheet, scored, so the UI can offer a picker. */
+  readonly sheets: readonly SheetCandidate[];
+  /** Where the header row was found, and how confidently. */
+  readonly header: HeaderDetection;
 
   /** In original sheet order. */
   readonly columns: readonly ColumnDescriptor[];
   readonly records: readonly ParsedRecord[];
   readonly droppedRows: readonly DroppedRow[];
+
+  /** Invariant failures. Empty for a clean file; never a reason to throw. */
+  readonly validation: ValidationReport;
 
   /** File-level problems. Row-level ones live on each record. */
   readonly warnings: readonly IngestWarning[];
