@@ -10,7 +10,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:geo": "node scripts/build-geo.mjs"
   },
   "dependencies": {
     "maplibre-gl": "^5.9.0",
@@ -28,6 +29,7 @@
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
     "eslint-config-next": "14.2.35",
+    "mapshaper": "^0.7.55",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.19",
     "typescript": "^5.7.2",

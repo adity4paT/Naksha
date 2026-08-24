@@ -40,3 +40,6 @@ yarn-error.log*
 *.xlsm
 *.kmz
 !Dummy land mis.xlsx
+
+# geo build scratch (downloaded source, not committed)
+/.geo-build/

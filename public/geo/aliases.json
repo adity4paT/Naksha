@@ -1,0 +1,92 @@
+{
+  "_readme": {
+    "purpose": "Hand-maintained corrections from spreadsheet place names to canonical boundary names. Consumed by the stage-2 alias lookup in src/lib/geo/resolver.ts.",
+    "hotReload": "Served as a static asset from /geo/aliases.json, never bundled. Edit this file and reload the page - no rebuild, no restart.",
+    "direction": "ALWAYS spreadsheet-spelling -> boundary-name. CLAUDE.md makes the GeoJSON the source of truth for administrative names; never add an alias that renames a boundary to match a spreadsheet.",
+    "matching": "The 'from' key is compared against the incoming name after normalization: lowercased, trimmed, NBSP and other Unicode spaces collapsed, punctuation removed, internal whitespace collapsed. Write 'from' in that normalized form - lowercase, no punctuation. 'to' must be the boundary name EXACTLY as it appears in the GeoJSON, including its own punctuation.",
+    "stateScoping": "A district entry may carry a 'state'. When present, the alias applies ONLY to records already resolved to that state. Use it whenever the 'from' spelling is also a real district somewhere else - see the raigarh entry.",
+    "verifying": "Every 'to' value below was checked to exist in india-districts.geojson / india-states.geojson at the pinned commit. The geo tests re-assert this, so a bad entry fails the build rather than silently producing an unmapped record."
+  },
+
+  "version": 1,
+
+  "states": {
+    "pondichery": "Puducherry",
+    "pondicherry": "Puducherry",
+    "jammu": "Jammu and Kashmir",
+    "j and k": "Jammu and Kashmir",
+    "jk": "Jammu and Kashmir",
+    "orissa": "Odisha",
+    "uttaranchal": "Uttarakhand",
+    "nct of delhi": "Delhi",
+    "new delhi": "Delhi"
+  },
+
+  "districts": [
+    {
+      "from": "raigarh",
+      "to": "Raigad",
+      "state": "Maharashtra",
+      "note": "STATE-SCOPED, AND IT MUST BE. Raigarh is a real district in Chhattisgarh and Raigad is a real district in Maharashtra; they sit 1,100 km apart and differ by one letter. Unscoped, this alias silently relocates Chhattisgarh records to the west coast. The three Maharashtra rows spelled 'Raigarh' in the sample (Dighi Port, Dighi) are genuinely in Raigad."
+    },
+    {
+      "from": "gurgoan",
+      "to": "Gurugram",
+      "note": "Misspelling of Gurgaon, which was itself renamed Gurugram in 2016."
+    },
+    { "from": "gurgaon", "to": "Gurugram", "note": "Pre-2016 official name." },
+    {
+      "from": "cochin",
+      "to": "Ernakulam",
+      "note": "Cochin/Kochi is a city; the district containing it is Ernakulam."
+    },
+    { "from": "kochi", "to": "Ernakulam" },
+    { "from": "mewat", "to": "Nuh", "note": "Mewat district was renamed Nuh in 2016." },
+    {
+      "from": "trivandrum",
+      "to": "Thiruvananthapuram",
+      "note": "Colonial-era name."
+    },
+    { "from": "sitpaur", "to": "Sitapur", "note": "Misspelling." },
+    { "from": "jallandhar", "to": "Jalandhar", "note": "Misspelling." },
+    { "from": "raibareli", "to": "Rae Bareli", "note": "Spacing variant." },
+    { "from": "rae bareily", "to": "Rae Bareli" },
+    { "from": "purnea", "to": "Purnia", "note": "Transliteration variant." },
+    { "from": "badaun", "to": "Budaun", "note": "Transliteration variant." },
+    { "from": "sonepat", "to": "Sonipat", "note": "Transliteration variant." },
+    {
+      "from": "nellore",
+      "to": "S.P.S. Nellore",
+      "note": "Boundary file uses the full 'Sri Potti Sriramulu' form, abbreviated with periods. The sample's value carries a trailing U+00A0, which normalization strips before this lookup runs."
+    },
+    { "from": "spsr nellore", "to": "S.P.S. Nellore" },
+    {
+      "from": "yadadri bhuvangiri",
+      "to": "Yadadri Bhuvanagiri",
+      "note": "Missing 'a' in the sample spelling."
+    },
+    { "from": "ludhiyana", "to": "Ludhiana", "note": "Transliteration variant." },
+    {
+      "from": "tiruvallur",
+      "to": "Thiruvallur",
+      "note": "DIRECTION REVERSED from the original brief. The boundary file spells this 'Thiruvallur'; the sample contains BOTH spellings (Tiruvallur x3, Thiruvallur x2), so the Th- form matches exactly at stage 1 and only the T- form needs an alias."
+    },
+    {
+      "from": "muktsar",
+      "to": "Sri Muktsar Sahib",
+      "note": "The boundary file uses the full official name. 'Muktsar' alone does NOT match, so this alias is required even for the spelling the brief treated as correct."
+    },
+    {
+      "from": "mutksar",
+      "to": "Sri Muktsar Sahib",
+      "note": "Transposition typo in the sample."
+    },
+    { "from": "mukhtsar", "to": "Sri Muktsar Sahib" },
+
+    { "from": "bombay", "to": "Mumbai" },
+    { "from": "calcutta", "to": "Kolkata" },
+    { "from": "madras", "to": "Chennai" },
+    { "from": "bangalore", "to": "Bengaluru Urban" },
+    { "from": "pondicherry", "to": "Puducherry", "state": "Puducherry" }
+  ]
+}

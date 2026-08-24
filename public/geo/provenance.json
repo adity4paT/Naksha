@@ -1,0 +1,23 @@
+{
+  "source": "https://github.com/udit-001/india-maps-data",
+  "commit": "cc91a19ffbca10b7ca6872a1e9690b4e5fd3aa0a",
+  "commitDate": "2026-07-13",
+  "path": "geojson/india.geojson",
+  "generatedBy": "scripts/build-geo.mjs",
+  "simplifyIntervalMetres": 1100,
+  "coordinatePrecisionDegrees": 0.0001,
+  "districtCount": 724,
+  "stateCount": 36,
+  "districtVintages": [
+    "2011_c",
+    "2012_c",
+    "2014_c",
+    "2015_c",
+    "2016_c",
+    "2017_c",
+    "2018",
+    "2019",
+    "update2014",
+    "update2025"
+  ]
+}
