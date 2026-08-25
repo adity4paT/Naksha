@@ -19,7 +19,13 @@ import { scaleValuesFrom } from '@/lib/aggregate';
 import type { ColorMode } from '@/lib/color';
 import { computeScale, rampFor } from '@/lib/color';
 import type { BoundaryIndex } from '@/lib/geo';
-import { breadcrumbFor, levelFor, useFilterStore } from '@/store/filters';
+import {
+  breadcrumbFor,
+  focusedDistrict,
+  focusedState,
+  levelFor,
+  useFilterStore,
+} from '@/store/filters';
 import { Breadcrumb } from './Breadcrumb';
 import { Legend } from './Legend';
 import { UnmappedPanel } from './UnmappedPanel';
@@ -50,23 +56,27 @@ export function MapDashboard({
   measureLabel,
   mode = 'light',
 }: MapDashboardProps) {
-  const selectedState = useFilterStore((s) => s.selectedState);
-  const selectedDistrict = useFilterStore((s) => s.selectedDistrict);
+  const selections = useFilterStore((s) => s.selections);
   const zoom = useFilterStore((s) => s.zoom);
   const scaleKind = useFilterStore((s) => s.scaleKind);
   const binningMethod = useFilterStore((s) => s.binningMethod);
   const binCount = useFilterStore((s) => s.binCount);
   const unmappedPanelOpen = useFilterStore((s) => s.unmappedPanelOpen);
 
-  const selectState = useFilterStore((s) => s.selectState);
-  const selectDistrict = useFilterStore((s) => s.selectDistrict);
+  const focusState = useFilterStore((s) => s.focusState);
+  const focusDistrict = useFilterStore((s) => s.focusDistrict);
   const navigateTo = useFilterStore((s) => s.navigateTo);
   const setBinningMethod = useFilterStore((s) => s.setBinningMethod);
   const setZoom = useFilterStore((s) => s.setZoom);
   const toggleUnmappedPanel = useFilterStore((s) => s.toggleUnmappedPanel);
   const openSiteList = useFilterStore((s) => s.openSiteList);
 
-  const level = levelFor({ selectedState, zoom });
+  // The map can only be "inside" one state at a time. With several selected in
+  // the panel it stays national and shows them all, which is the honest
+  // rendering of that filter — see focusedState in the store.
+  const selectedState = focusedState(selections);
+  const selectedDistrict = focusedDistrict(selections);
+  const level = levelFor({ selections, zoom });
   const aggregation = level === 'state' ? stateAggregation : districtAggregation;
 
   /**
@@ -93,7 +103,7 @@ export function MapDashboard({
 
   const ramp = useMemo(() => rampFor(scaleKind, mode, binCount), [scaleKind, mode, binCount]);
 
-  const trail = breadcrumbFor({ selectedState, selectedDistrict });
+  const trail = breadcrumbFor(selections);
 
   const { hasNoData, hasZero } = useMemo(() => {
     const entries = level === 'state' ? boundaries.states : boundaries.districts;
@@ -129,8 +139,8 @@ export function MapDashboard({
           measureLabel={measureLabel}
           selectedState={selectedState}
           selectedDistrict={selectedDistrict}
-          onSelectState={selectState}
-          onSelectDistrict={selectDistrict}
+          onSelectState={focusState}
+          onSelectDistrict={focusDistrict}
           onZoomChange={setZoom}
           onOpenSiteList={openSiteList}
         />

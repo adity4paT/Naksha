@@ -1,23 +1,33 @@
 /**
  * Filter and view state.
  *
- * The map and the filter controls are two views of this one store, which is
- * what makes them bidirectionally synced: clicking Gujarat on the map and
- * choosing Gujarat from a dropdown are the same action because both call
- * {@link FilterState.selectState}. Neither component holds selection state of
- * its own, so they cannot disagree.
+ * The map and the filter panel are two views of this one store, which is what
+ * makes them bidirectionally synced: clicking Gujarat on the map and ticking
+ * Gujarat in the panel are the same action because both write `selections.state`.
+ * Neither component owns selection state, so they cannot disagree.
  *
- * The map still owns genuinely cartographic state — current zoom, camera
- * position mid-flight — because that is a property of the viewport, not of the
- * user's filter. The one place the two meet is {@link FilterState.zoom}, which
- * the map pushes into the store so the district-level auto-activation rule can
- * be evaluated in one place.
+ * ## Map drill-down and multi-select are the same field
+ *
+ * The map drills into one state at a time; the panel allows many. Rather than
+ * keeping two fields and reconciling them — which is how they drift — the map's
+ * drill-down *sets* `selections.state` to a single-element array, and reads
+ * {@link focusedState}, which is non-null only when exactly one state is
+ * selected. Selecting three states in the panel therefore leaves the map at
+ * national level showing all three, which is the honest rendering of that
+ * filter.
+ *
+ * ## Selections are retained, never pruned
+ *
+ * Nothing in this store removes a selection because it became unavailable. See
+ * `src/lib/filters/types.ts` — active selections are derived, and orphaned ones
+ * stay visible and restorable.
  */
 
 import { create } from 'zustand';
 
-import type { BinningMethod } from '@/lib/color';
-import type { BinCount, ScaleKind } from '@/lib/color';
+import type { BinCount, BinningMethod, ScaleKind } from '@/lib/color';
+import type { FilterDimension, FilterSelections, RangeSelection } from '@/lib/filters';
+import { EMPTY_SELECTIONS } from '@/lib/filters';
 import type { NormalizedKey } from '@/types/schema';
 
 /** Which administrative level the choropleth is painting. */
@@ -38,14 +48,10 @@ export interface BreadcrumbStep {
 }
 
 export interface FilterState {
-  /* ---- selection ---- */
-  /** Canonical state name, or null for the whole country. */
-  readonly selectedState: string | null;
-  /** Canonical district name. Only meaningful with a state selected. */
-  readonly selectedDistrict: string | null;
+  /* ---- filters ---- */
+  readonly selections: FilterSelections;
 
   /* ---- measure & scale ---- */
-  /** Discovered column driving the choropleth. Null until a workbook loads. */
   readonly measureKey: NormalizedKey | null;
   readonly scaleKind: ScaleKind;
   readonly binningMethod: BinningMethod;
@@ -55,17 +61,32 @@ export interface FilterState {
   readonly zoom: number;
 
   /* ---- panels ---- */
-  /** Unmapped panel starts collapsed but is never removed. */
   readonly unmappedPanelOpen: boolean;
-  /** Region whose site list is open in the side panel. */
   readonly siteListRegion: string | null;
+  /** Selections dropped because the URL grew too long. Surfaced, never silent. */
+  readonly urlTruncated: readonly string[];
 
   /* ---- actions ---- */
-  selectState: (state: string | null) => void;
-  selectDistrict: (district: string | null) => void;
-  clearSelection: () => void;
-  /** Jump to a breadcrumb depth: 0 = India, 1 = state, 2 = district. */
+  toggleValue: (dimension: FilterDimension, value: string) => void;
+  setValues: (dimension: FilterDimension, values: readonly string[]) => void;
+  addValues: (dimension: FilterDimension, values: readonly string[]) => void;
+  removeValue: (dimension: FilterDimension, value: string) => void;
+  clearDimension: (dimension: FilterDimension) => void;
+  /** Apply an orphan's restore action: widen every named upstream filter. */
+  restoreOrphan: (restore: Readonly<Partial<Record<FilterDimension, readonly string[]>>>) => void;
+
+  setRange: (key: string, range: RangeSelection) => void;
+  clearRange: (key: string) => void;
+
+  resetAll: () => void;
+  hydrate: (partial: Partial<Pick<FilterState, 'selections' | 'measureKey' | 'scaleKind' | 'binningMethod' | 'binCount'>>) => void;
+
+  /* ---- map ---- */
+  /** Drill into one state. Replaces the state selection rather than adding. */
+  focusState: (state: string | null) => void;
+  focusDistrict: (district: string | null) => void;
   navigateTo: (depth: 0 | 1 | 2) => void;
+
   setMeasure: (key: NormalizedKey) => void;
   setScaleKind: (kind: ScaleKind) => void;
   setBinningMethod: (method: BinningMethod) => void;
@@ -73,11 +94,17 @@ export interface FilterState {
   setZoom: (zoom: number) => void;
   toggleUnmappedPanel: () => void;
   openSiteList: (region: string | null) => void;
+  setUrlTruncated: (dimensions: readonly string[]) => void;
 }
 
+const withDimension = (
+  selections: FilterSelections,
+  dimension: FilterDimension,
+  values: readonly string[],
+): FilterSelections => ({ ...selections, [dimension]: values });
+
 export const useFilterStore = create<FilterState>((set) => ({
-  selectedState: null,
-  selectedDistrict: null,
+  selections: EMPTY_SELECTIONS,
 
   measureKey: null,
   scaleKind: 'sequential',
@@ -91,27 +118,121 @@ export const useFilterStore = create<FilterState>((set) => ({
 
   unmappedPanelOpen: false,
   siteListRegion: null,
+  urlTruncated: [],
 
-  selectState: (state) =>
-    set((current) =>
-      // Re-selecting the same state is a no-op rather than a reset. Clicking a
-      // state you are already inside should not throw away your district.
-      current.selectedState === state
-        ? current
-        : { selectedState: state, selectedDistrict: null, siteListRegion: null },
-    ),
+  toggleValue: (dimension, value) =>
+    set((current) => {
+      const existing = current.selections[dimension];
+      const next = existing.includes(value)
+        ? existing.filter((v) => v !== value)
+        : [...existing, value];
+      return { selections: withDimension(current.selections, dimension, next) };
+    }),
 
-  selectDistrict: (district) => set({ selectedDistrict: district, siteListRegion: null }),
+  setValues: (dimension, values) =>
+    set((current) => ({
+      selections: withDimension(current.selections, dimension, [...values]),
+    })),
 
-  clearSelection: () =>
-    set({ selectedState: null, selectedDistrict: null, siteListRegion: null }),
+  addValues: (dimension, values) =>
+    set((current) => ({
+      selections: withDimension(current.selections, dimension, [
+        ...new Set([...current.selections[dimension], ...values]),
+      ]),
+    })),
+
+  removeValue: (dimension, value) =>
+    set((current) => ({
+      selections: withDimension(
+        current.selections,
+        dimension,
+        current.selections[dimension].filter((v) => v !== value),
+      ),
+    })),
+
+  clearDimension: (dimension) =>
+    set((current) => ({ selections: withDimension(current.selections, dimension, []) })),
+
+  restoreOrphan: (restore) =>
+    set((current) => {
+      let selections = current.selections;
+      // Widen every blocking upstream filter in one update, so restore is a
+      // single click and a single re-render rather than a visible cascade.
+      for (const [dimension, values] of Object.entries(restore)) {
+        if (values === undefined) continue;
+        const key = dimension as FilterDimension;
+        selections = withDimension(selections, key, [
+          ...new Set([...selections[key], ...values]),
+        ]);
+      }
+      return { selections };
+    }),
+
+  setRange: (key, range) =>
+    set((current) => ({
+      selections: {
+        ...current.selections,
+        ranges: { ...current.selections.ranges, [key]: range },
+      },
+    })),
+
+  clearRange: (key) =>
+    set((current) => {
+      const ranges = { ...current.selections.ranges };
+      delete ranges[key];
+      return { selections: { ...current.selections, ranges } };
+    }),
+
+  resetAll: () =>
+    set({ selections: EMPTY_SELECTIONS, siteListRegion: null, urlTruncated: [] }),
+
+  hydrate: (partial) => set(partial),
+
+  focusState: (state) =>
+    set((current) => {
+      // Re-focusing the state you are already in is a no-op, so clicking a
+      // state twice does not throw away the district you drilled into.
+      if (state !== null && current.selections.state.length === 1 && current.selections.state[0] === state) {
+        return current;
+      }
+      return {
+        selections: {
+          ...current.selections,
+          state: state === null ? [] : [state],
+          // Drilling into a different state discards the district focus, which
+          // belonged to the state being left. Districts are NOT retained here
+          // as orphans: this is a navigation action, not a filter edit, and the
+          // user is asking to look somewhere else.
+          district: [],
+        },
+        siteListRegion: null,
+      };
+    }),
+
+  focusDistrict: (district) =>
+    set((current) => ({
+      selections: withDimension(
+        current.selections,
+        'district',
+        district === null ? [] : [district],
+      ),
+      siteListRegion: null,
+    })),
 
   navigateTo: (depth) =>
     set((current) => {
       if (depth === 0) {
-        return { selectedState: null, selectedDistrict: null, siteListRegion: null };
+        return {
+          selections: { ...current.selections, state: [], district: [], site: [] },
+          siteListRegion: null,
+        };
       }
-      if (depth === 1) return { selectedDistrict: null, siteListRegion: null };
+      if (depth === 1) {
+        return {
+          selections: { ...current.selections, district: [], site: [] },
+          siteListRegion: null,
+        };
+      }
       return current;
     }),
 
@@ -125,6 +246,7 @@ export const useFilterStore = create<FilterState>((set) => ({
     set((current) => ({ unmappedPanelOpen: !current.unmappedPanelOpen })),
 
   openSiteList: (siteListRegion) => set({ siteListRegion }),
+  setUrlTruncated: (urlTruncated) => set({ urlTruncated: [...urlTruncated] }),
 }));
 
 /* -------------------------------------------------------------------------- */
@@ -132,29 +254,54 @@ export const useFilterStore = create<FilterState>((set) => ({
 /* -------------------------------------------------------------------------- */
 
 /**
+ * The single state the map is drilled into, or null.
+ *
+ * Null when zero states are selected (national view) and also when several are
+ * — the map cannot "be inside" three states at once, so it stays national and
+ * shows all three highlighted.
+ */
+export function focusedState(selections: FilterSelections): string | null {
+  return selections.state.length === 1 ? (selections.state[0] ?? null) : null;
+}
+
+/** The single district the map is drilled into, or null. */
+export function focusedDistrict(selections: FilterSelections): string | null {
+  return selections.district.length === 1 ? (selections.district[0] ?? null) : null;
+}
+
+/**
  * Which level the choropleth should paint.
  *
- * District level activates on an explicit state selection OR at
+ * District level activates on any state selection OR at
  * {@link DISTRICT_ZOOM_THRESHOLD}. Two triggers because they serve different
- * intents: clicking a state is "show me inside this", while zooming in is
- * "I want more detail wherever I am looking", and the second must work without
+ * intents: selecting a state is "show me inside this", while zooming in is
+ * "more detail wherever I am looking", and the second must work without
  * committing the user to a filter they did not ask for.
  */
-export function levelFor(state: Pick<FilterState, 'selectedState' | 'zoom'>): MapLevel {
-  if (state.selectedState !== null) return 'district';
+export function levelFor(state: Pick<FilterState, 'selections' | 'zoom'>): MapLevel {
+  if (state.selections.state.length > 0) return 'district';
   return state.zoom >= DISTRICT_ZOOM_THRESHOLD ? 'district' : 'state';
 }
 
 /** Breadcrumb trail: India › Gujarat › Kutch. */
-export function breadcrumbFor(
-  state: Pick<FilterState, 'selectedState' | 'selectedDistrict'>,
-): readonly BreadcrumbStep[] {
+export function breadcrumbFor(selections: FilterSelections): readonly BreadcrumbStep[] {
   const trail: BreadcrumbStep[] = [{ label: 'India', level: 'country' }];
-  if (state.selectedState !== null) {
-    trail.push({ label: state.selectedState, level: 'state' });
+
+  const states = selections.state;
+  if (states.length === 1) {
+    trail.push({ label: states[0]!, level: 'state' });
+  } else if (states.length > 1) {
+    // Several states selected is a filter, not a location, and the breadcrumb
+    // says so rather than picking one arbitrarily.
+    trail.push({ label: `${states.length} states`, level: 'state' });
   }
-  if (state.selectedDistrict !== null && state.selectedState !== null) {
-    trail.push({ label: state.selectedDistrict, level: 'district' });
+
+  const districts = selections.district;
+  if (states.length > 0 && districts.length === 1) {
+    trail.push({ label: districts[0]!, level: 'district' });
+  } else if (states.length > 0 && districts.length > 1) {
+    trail.push({ label: `${districts.length} districts`, level: 'district' });
   }
+
   return trail;
 }
