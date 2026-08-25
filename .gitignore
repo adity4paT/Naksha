@@ -1,0 +1,48 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+
+# production
+/build
+
+# testing
+/coverage
+
+# misc
+.DS_Store
+*.pem
+.vscode/
+.idea/
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env
+.env
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+# Source MIS workbooks — commercial land-holding data, never commit.
+# See CLAUDE.md "Confidentiality". The dummy sample is exempted below.
+*.xlsx
+*.xls
+*.xlsm
+*.kmz
+!Dummy land mis.xlsx
+
+# geo build scratch (downloaded source, not committed)
+/.geo-build/
+
+# static export output
+/out/
