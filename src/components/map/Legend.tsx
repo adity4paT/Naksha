@@ -66,7 +66,7 @@ export function Legend({
   return (
     <section
       aria-label="Map legend"
-      className="w-64 rounded-lg border border-slate-200 bg-white/95 p-3 text-xs shadow-sm backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/95"
+      className="w-full shrink-0 rounded-lg border border-stone-200 bg-white p-3 text-xs"
     >
       <h2 className="mb-0.5 font-semibold text-slate-900 dark:text-neutral-100">
         {measureLabel}

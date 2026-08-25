@@ -151,23 +151,55 @@ export function MapView({
       center: INITIAL_VIEW.center,
       zoom: INITIAL_VIEW.zoom,
       attributionControl: false,
+
+      // Scroll-to-zoom, explicitly. It is MapLibre's default, but the default
+      // is easy to lose to a stray option and it is the first thing a user
+      // reaches for on a map.
+      scrollZoom: true,
+      boxZoom: false,
+      // A choropleth of administrative units has no reason to rotate or tilt,
+      // and an accidental two-finger twist that leaves India at an angle is
+      // pure confusion with no way back short of reloading.
+      dragRotate: false,
+      pitchWithRotate: false,
+      touchZoomRotate: true,
+
+      // Zoom floor and ceiling. Without a floor, maxBounds makes MapLibre
+      // derive one from the viewport — and in a short, wide container that
+      // derived floor can land on top of the initial zoom, so scrolling out
+      // does nothing and the map feels broken.
+      minZoom: 3,
+      maxZoom: 10,
+
       // The data is Indian administrative boundaries; there is nothing to see
-      // outside these bounds and letting users pan to the Pacific is just a way
-      // to get lost.
+      // outside these bounds. Padded well beyond the coastline so panning at
+      // low zoom does not feel like hitting a wall.
       maxBounds: [
-        [60, 2],
-        [105, 42],
+        [55, -5],
+        [110, 45],
       ],
     });
+
+    // Double-click zoom interferes with double-clicking a district to drill in.
+    map.doubleClickZoom.disable();
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     map.on('load', () => setReady(true));
     map.on('zoomend', () => onZoomChange(map.getZoom()));
 
+    // MapLibre listens for WINDOW resize but not for its own container
+    // changing size. This layout changes it often — collapsing the supporting
+    // views, hiding the filter panel, opening the site list — and without this
+    // the canvas keeps its old dimensions and the map renders letterboxed
+    // inside a container that has already grown.
+    const observer = new ResizeObserver(() => map.resize());
+    observer.observe(containerRef.current);
+
     mapRef.current = map;
     setMapInstance(map);
 
     return () => {
+      observer.disconnect();
       map.remove();
       mapRef.current = null;
       setMapInstance(null);

@@ -45,6 +45,7 @@ export function AppShell() {
   const [boundaries, setBoundaries] = useState<BoundaryLoad>({ status: 'loading' });
   const [uploadOpen, setUploadOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('chart');
+  const [viewsOpen, setViewsOpen] = useState(true);
   const [attempt, setAttempt] = useState(0);
 
   useUrlSync();
@@ -281,14 +282,23 @@ export function AppShell() {
         )}
 
         <main className="flex min-w-0 flex-1 flex-col gap-3 p-3">
-          <div className="min-h-0 flex-[3]">{mapPane}</div>
+          {/*
+            The map gets the dominant share AND a hard floor. Sharing space
+            3:2 with the supporting views left it about 340px tall on a laptop,
+            which is not enough to read district shapes in — and flex alone
+            would let the header and unmapped panel squeeze it further. The
+            min-height is what stops that.
+          */}
+          <div className={`min-h-[26rem] ${viewsOpen ? 'flex-[5]' : 'flex-1'} min-w-0`}>
+            {mapPane}
+          </div>
 
           {workbook !== null && !derived.filteredToNothing && (
-            <div className="flex min-h-0 flex-[2] flex-col">
+            <div className={`flex min-h-0 flex-col ${viewsOpen ? 'flex-[2]' : 'shrink-0'}`}>
               <div
                 role="tablist"
                 aria-label="Supporting views"
-                className="flex shrink-0 gap-1 pb-2"
+                className="flex shrink-0 items-center gap-1 pb-2"
               >
                 {(['chart', 'table'] as const).map((option) => (
                   <button
@@ -306,9 +316,23 @@ export function AppShell() {
                     {option === 'chart' ? 'Top regions' : 'Records'}
                   </button>
                 ))}
+
+                {/*
+                  Lets the map go full height. A desk tool gets used at 13"
+                  as often as at 27", and on the small screen the choice
+                  between "see the map" and "see the table" is a real one.
+                */}
+                <button
+                  type="button"
+                  onClick={() => setViewsOpen((open) => !open)}
+                  aria-expanded={viewsOpen}
+                  className="ml-auto rounded px-2 py-1 text-[11px] text-stone-500 hover:bg-stone-100 hover:text-stone-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-600"
+                >
+                  {viewsOpen ? 'Hide panel ▾' : 'Show panel ▴'}
+                </button>
               </div>
 
-              <div className="min-h-0 flex-1">
+              <div className={viewsOpen ? 'min-h-0 flex-1' : 'hidden'}>
                 {tab === 'chart' ? (
                   <TopRegionsChart
                     regions={regions}
