@@ -45,6 +45,8 @@ export function AppShell() {
   const [boundaries, setBoundaries] = useState<BoundaryLoad>({ status: 'loading' });
   const [uploadOpen, setUploadOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('chart');
+  const [viewsOpen, setViewsOpen] = useState(true);
+  const [filtersOpen, setFiltersOpen] = useState(true);
   const [attempt, setAttempt] = useState(0);
 
   useUrlSync();
@@ -142,6 +144,16 @@ export function AppShell() {
     () => [...derived.aggregation.byRegion.values()],
     [derived.aggregation],
   );
+
+  // Active constraint count, so collapsing the panel never hides the fact
+  // that filters are applied. A user reading a total off a map they think is
+  // unfiltered is the failure this guards against.
+  const activeFilters =
+    selections.business.length +
+    selections.state.length +
+    selections.district.length +
+    selections.site.length +
+    Object.keys(selections.ranges).length;
 
   const hasBoundaries = boundaries.status === 'ready';
   const selectedRegion = focusedState(selections);
@@ -271,24 +283,92 @@ export function AppShell() {
 
       {/* ---- body ---- */}
       <div className="flex min-h-0 flex-1">
+        {/*
+          Collapsible, because the map is the point of the screen and 288px of
+          filters is a lot of it on a 13" laptop.
+
+          Collapsed it becomes a rail rather than disappearing: the toggle stays
+          reachable and the active-filter count stays visible. A panel that
+          vanishes completely would let someone read a total off a map they
+          believe is unfiltered.
+
+          Hidden below tablet width rather than redesigned as a bottom sheet.
+          This is a desk tool; a half-working phone layout is worse than none.
+        */}
         {workbook !== null && (
-          // Hidden below tablet width rather than redesigned as a bottom sheet.
-          // This is a desk tool; a phone layout is not worth V1's time, and a
-          // half-working one is worse than none.
-          <div className="hidden md:block">
-            <FilterPanel rows={derived.facetRows} measures={derived.rangeMeasures} />
+          <div className="hidden md:flex">
+            {filtersOpen ? (
+              <div className="relative flex">
+                <FilterPanel rows={derived.facetRows} measures={derived.rangeMeasures} />
+                <button
+                  type="button"
+                  onClick={() => setFiltersOpen(false)}
+                  aria-expanded={true}
+                  aria-controls="filter-panel"
+                  title="Hide filters"
+                  className="absolute right-0 top-2 z-10 rounded-l border border-r-0 border-stone-300 bg-white px-1 py-2 text-[10px] text-stone-500 hover:bg-stone-100 hover:text-stone-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-600"
+                >
+                  ◀
+                </button>
+              </div>
+            ) : (
+              <div className="flex w-10 shrink-0 flex-col items-center gap-2 border-r border-stone-200 bg-stone-50 py-2">
+                <button
+                  type="button"
+                  onClick={() => setFiltersOpen(true)}
+                  aria-expanded={false}
+                  aria-controls="filter-panel"
+                  title="Show filters"
+                  className="rounded border border-stone-300 bg-white px-1 py-2 text-[10px] text-stone-600 hover:bg-stone-100 hover:text-stone-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-600"
+                >
+                  ▶
+                </button>
+
+                <span
+                  className="text-[10px] font-semibold uppercase tracking-wide text-stone-500"
+                  style={{ writingMode: 'vertical-rl' }}
+                >
+                  Filters
+                </span>
+
+                {activeFilters > 0 && (
+                  <span
+                    title={`${activeFilters} filter${activeFilters === 1 ? '' : 's'} active`}
+                    className="rounded-full bg-sky-700 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white"
+                  >
+                    {activeFilters}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         )}
 
-        <main className="flex min-w-0 flex-1 flex-col gap-3 p-3">
-          <div className="min-h-0 flex-[3]">{mapPane}</div>
+        {/*
+          min-h-0 is load-bearing, not defensive. A flex item defaults to
+          min-height:auto, which means it refuses to shrink below its content
+          — so without this <main> grows past the viewport, the panes below
+          never get a bounded height, and their overflow-y-auto has nothing to
+          scroll against.
+        */}
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 p-3">
+          {/*
+            The map gets the dominant share AND a hard floor. Sharing space
+            3:2 with the supporting views left it about 340px tall on a laptop,
+            which is not enough to read district shapes in — and flex alone
+            would let the header and unmapped panel squeeze it further. The
+            min-height is what stops that.
+          */}
+          <div className={`min-h-[26rem] ${viewsOpen ? 'flex-[5]' : 'flex-1'} min-w-0`}>
+            {mapPane}
+          </div>
 
           {workbook !== null && !derived.filteredToNothing && (
-            <div className="flex min-h-0 flex-[2] flex-col">
+            <div className={`flex min-h-0 flex-col ${viewsOpen ? 'flex-[2]' : 'shrink-0'}`}>
               <div
                 role="tablist"
                 aria-label="Supporting views"
-                className="flex shrink-0 gap-1 pb-2"
+                className="flex shrink-0 items-center gap-1 pb-2"
               >
                 {(['chart', 'table'] as const).map((option) => (
                   <button
@@ -306,9 +386,28 @@ export function AppShell() {
                     {option === 'chart' ? 'Top regions' : 'Records'}
                   </button>
                 ))}
+
+                {/*
+                  Lets the map go full height. A desk tool gets used at 13"
+                  as often as at 27", and on the small screen the choice
+                  between "see the map" and "see the table" is a real one.
+                */}
+                <button
+                  type="button"
+                  onClick={() => setViewsOpen((open) => !open)}
+                  aria-expanded={viewsOpen}
+                  className="ml-auto rounded px-2 py-1 text-[11px] text-stone-500 hover:bg-stone-100 hover:text-stone-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-600"
+                >
+                  {viewsOpen ? 'Hide panel ▾' : 'Show panel ▴'}
+                </button>
               </div>
 
-              <div className="min-h-0 flex-1">
+              {/*
+                A flex container, so the view inside becomes a flex item with
+                a bounded height. As a plain block its child would size to
+                content and spill out of the panel.
+              */}
+              <div className={viewsOpen ? 'flex min-h-0 flex-1' : 'hidden'}>
                 {tab === 'chart' ? (
                   <TopRegionsChart
                     regions={regions}

@@ -81,16 +81,16 @@ export function RangeFilter({ bounds, range, onChange, onClear }: RangeFilterPro
   const rightPct = ((current.max - bounds.min) / span) * 100;
 
   return (
-    <div className="rounded-md border border-slate-200 bg-white p-2.5 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="rounded-md border border-stone-200 bg-white p-2.5 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-xs font-medium text-slate-900 dark:text-neutral-100">
+        <span className="text-xs font-medium text-stone-900 dark:text-neutral-100">
           {bounds.label}
         </span>
         {active && (
           <button
             type="button"
             onClick={() => onClear(bounds.key)}
-            className="text-[11px] text-slate-500 hover:underline dark:text-neutral-400"
+            className="text-[11px] text-stone-500 hover:underline dark:text-neutral-400"
           >
             Reset
           </button>
@@ -101,7 +101,7 @@ export function RangeFilter({ bounds, range, onChange, onClear }: RangeFilterPro
           pointer implementation, so keyboard support (arrows, Home/End) and
           screen-reader announcement come from the platform. */}
       <div className="relative mt-3 h-4">
-        <div className="absolute inset-x-0 top-1.5 h-1 rounded bg-slate-200 dark:bg-neutral-700" />
+        <div className="absolute inset-x-0 top-1.5 h-1 rounded bg-stone-200 dark:bg-neutral-700" />
         <div
           className="absolute top-1.5 h-1 rounded bg-blue-500"
           style={{ left: `${leftPct}%`, right: `${100 - rightPct}%` }}
@@ -144,9 +144,9 @@ export function RangeFilter({ bounds, range, onChange, onClear }: RangeFilterPro
           onKeyDown={(event) => {
             if (event.key === 'Enter') commitText('min', (event.target as HTMLInputElement).value);
           }}
-          className="w-full rounded border border-slate-200 px-1.5 py-1 text-right text-[11px] tabular-nums focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-neutral-700 dark:bg-neutral-800"
+          className="w-full rounded border border-stone-300 bg-white px-1.5 py-1 text-right text-[11px] tabular-nums text-stone-900 focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
         />
-        <span className="text-[11px] text-slate-400">to</span>
+        <span className="text-[11px] text-stone-500">to</span>
         <label htmlFor={maxId} className="sr-only">
           {bounds.label} maximum, in acres
         </label>
@@ -162,11 +162,11 @@ export function RangeFilter({ bounds, range, onChange, onClear }: RangeFilterPro
           onKeyDown={(event) => {
             if (event.key === 'Enter') commitText('max', (event.target as HTMLInputElement).value);
           }}
-          className="w-full rounded border border-slate-200 px-1.5 py-1 text-right text-[11px] tabular-nums focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-neutral-700 dark:bg-neutral-800"
+          className="w-full rounded border border-stone-300 bg-white px-1.5 py-1 text-right text-[11px] tabular-nums text-stone-900 focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
         />
       </div>
 
-      <p className="mt-1 text-[10px] tabular-nums text-slate-400 dark:text-neutral-500">
+      <p className="mt-1 text-[10px] tabular-nums text-stone-500 dark:text-neutral-500">
         data range {bounds.min.toLocaleString('en-IN')} –{' '}
         {bounds.max.toLocaleString('en-IN')} acres
       </p>

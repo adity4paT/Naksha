@@ -118,49 +118,56 @@ export function MapDashboard({
 
   return (
     <div className="flex h-full flex-col gap-2">
-      <header className="flex items-start justify-between gap-4 px-1">
-        <div className="flex flex-col gap-1">
-          <Breadcrumb trail={trail} onNavigate={navigateTo} />
-          <p className="text-xs text-slate-500 dark:text-neutral-400">
-            {level === 'state' ? 'States' : 'Districts'} ·{' '}
-            <span className="tabular-nums">
-              {
-                [...aggregation.byRegion.values()].filter((r) => r.value !== null)
-                  .length
-              }
-            </span>{' '}
-            with a value
-          </p>
-        </div>
-
-        <MeasurePicker
-          groups={measureGroups}
-          selectedId={measure.id}
-          onChange={setMeasure}
-          selected={measure}
-          supersedingLabel={supersedingLabel}
-        />
+      <header className="flex shrink-0 items-baseline gap-3 px-1">
+        <Breadcrumb trail={trail} onNavigate={navigateTo} />
+        <p className="text-[11px] text-stone-500">
+          {level === 'state' ? 'States' : 'Districts'} ·{' '}
+          <span className="tabular-nums">
+            {[...aggregation.byRegion.values()].filter((r) => r.value !== null).length}
+          </span>{' '}
+          with a value
+        </p>
       </header>
 
-      <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-slate-200 dark:border-neutral-800">
-        <MapView
-          boundaries={boundaries}
-          aggregation={aggregation}
-          scale={scale}
-          ramp={ramp}
-          mode={mode}
-          level={level}
-          measureLabel={measure.label}
-          formatValue={formatValue}
-          selectedState={selectedState}
-          selectedDistrict={selectedDistrict}
-          onSelectState={focusState}
-          onSelectDistrict={focusDistrict}
-          onZoomChange={setZoom}
-          onOpenSiteList={openSiteList}
-        />
+      {/*
+        Map and its controls sit SIDE BY SIDE, not stacked with the legend
+        floating on top. An overlaid legend covers the north-east states at
+        every viewport width, and those are exactly the small regions a reader
+        has to squint at already. Giving the controls their own column costs
+        256px of width — which this layout has — and buys back the whole map.
+      */}
+      <div className="flex min-h-0 flex-1 gap-2">
+        <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-stone-200 bg-white">
+          <MapView
+            boundaries={boundaries}
+            aggregation={aggregation}
+            scale={scale}
+            ramp={ramp}
+            mode={mode}
+            level={level}
+            measureLabel={measure.label}
+            formatValue={formatValue}
+            selectedState={selectedState}
+            selectedDistrict={selectedDistrict}
+            onSelectState={focusState}
+            onSelectDistrict={focusDistrict}
+            onZoomChange={setZoom}
+            onOpenSiteList={openSiteList}
+          />
+        </div>
 
-        <div className="absolute right-3 top-3">
+        <aside
+          aria-label="Map controls"
+          className="flex w-64 shrink-0 flex-col gap-2 overflow-y-auto"
+        >
+          <MeasurePicker
+            groups={measureGroups}
+            selectedId={measure.id}
+            onChange={setMeasure}
+            selected={measure}
+            supersedingLabel={supersedingLabel}
+          />
+
           <Legend
             scale={scale}
             ramp={ramp}
@@ -173,7 +180,7 @@ export function MapDashboard({
             hasNoDataRegions={hasNoData}
             hasZeroRegions={hasZero}
           />
-        </div>
+        </aside>
       </div>
 
       {/*

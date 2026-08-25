@@ -90,8 +90,8 @@ export function DataTable({ records, columns, measure, totalRecords }: DataTable
   };
 
   return (
-    <section aria-label="Filtered records" className="flex min-h-0 flex-col">
-      <header className="flex items-baseline justify-between gap-3 px-1 pb-2">
+    <section aria-label="Filtered records" className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <header className="flex shrink-0 items-baseline justify-between gap-3 px-1 pb-2">
         <h2 className="text-xs font-semibold text-stone-700">Records</h2>
         <p className="text-[11px] tabular-nums text-stone-500">
           {records.length.toLocaleString('en-IN')} of{' '}
@@ -185,7 +185,7 @@ export function DataTable({ records, columns, measure, totalRecords }: DataTable
       {pageCount > 1 && (
         <nav
           aria-label="Table pages"
-          className="flex items-center justify-end gap-2 px-1 pt-2"
+          className="flex shrink-0 items-center justify-end gap-2 px-1 pt-2"
         >
           <button
             type="button"

@@ -92,8 +92,9 @@ export function FilterPanel({ rows, measures }: FilterPanelProps) {
 
   return (
     <aside
+      id="filter-panel"
       aria-label="Filters"
-      className="flex h-full w-72 shrink-0 flex-col gap-3 overflow-y-auto border-r border-slate-200 bg-slate-50 p-3 dark:border-neutral-800 dark:bg-neutral-950"
+      className="flex h-full w-72 shrink-0 flex-col gap-3 overflow-y-auto border-r border-stone-200 bg-stone-50 p-3 dark:border-neutral-800 dark:bg-neutral-950"
     >
       <FilterChips
         selections={selections}
@@ -124,7 +125,7 @@ export function FilterPanel({ rows, measures }: FilterPanelProps) {
         <section aria-labelledby="filters-independent">
           <h2
             id="filters-independent"
-            className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400"
+            className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-stone-500 dark:text-neutral-400"
           >
             Cross-cutting
           </h2>
@@ -136,19 +137,19 @@ export function FilterPanel({ rows, measures }: FilterPanelProps) {
             onRestore={handleRestore}
             onRemoveOrphan={removeValue}
           />
-          <p className="mt-1 px-0.5 text-[10px] leading-snug text-slate-500 dark:text-neutral-500">
+          <p className="mt-1 px-0.5 text-[10px] leading-snug text-stone-500 dark:text-neutral-500">
             Applies across all geography. This list never narrows — only its counts change.
           </p>
         </section>
       )}
 
-      <hr className="border-slate-200 dark:border-neutral-800" />
+      <hr className="border-stone-200 dark:border-neutral-800" />
 
       {/* ---- geographic cascade ---- */}
       <section aria-labelledby="filters-cascade">
         <h2
           id="filters-cascade"
-          className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400"
+          className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-stone-500 dark:text-neutral-400"
         >
           Geography
         </h2>
@@ -168,7 +169,7 @@ export function FilterPanel({ rows, measures }: FilterPanelProps) {
                 style={{ marginLeft: index * 8 }}
                 className={
                   index > 0
-                    ? 'border-l-2 border-slate-200 pl-2 dark:border-neutral-800'
+                    ? 'border-l-2 border-stone-200 pl-2 dark:border-neutral-800'
                     : undefined
                 }
               >
@@ -181,7 +182,7 @@ export function FilterPanel({ rows, measures }: FilterPanelProps) {
                   onRemoveOrphan={removeValue}
                 />
                 {hint !== null && (
-                  <p className="mt-0.5 px-0.5 text-[10px] text-slate-400 dark:text-neutral-500">
+                  <p className="mt-0.5 px-0.5 text-[10px] text-stone-500 dark:text-neutral-500">
                     {hint}
                   </p>
                 )}
@@ -194,11 +195,11 @@ export function FilterPanel({ rows, measures }: FilterPanelProps) {
       {/* ---- measures ---- */}
       {bounds.length > 0 && (
         <>
-          <hr className="border-slate-200 dark:border-neutral-800" />
+          <hr className="border-stone-200 dark:border-neutral-800" />
           <section aria-labelledby="filters-measures">
             <h2
               id="filters-measures"
-              className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400"
+              className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-stone-500 dark:text-neutral-400"
             >
               Measures (acres)
             </h2>

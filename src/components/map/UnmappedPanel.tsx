@@ -81,7 +81,7 @@ export function UnmappedPanel({
           )}
 
           {isClean ? (
-            <span className="font-medium text-emerald-800 dark:text-emerald-300">
+            <span className="font-medium text-black dark:text-white">
               All records mapped — nothing missing from this view
             </span>
           ) : (

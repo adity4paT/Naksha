@@ -75,13 +75,13 @@ export function MultiSelectFilter({
 
   return (
     <fieldset
-      className="rounded-md border border-slate-200 bg-white dark:border-neutral-800 dark:bg-neutral-900"
+      className="rounded-md border border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-900"
       disabled={disabled}
     >
       <legend className="sr-only">{label} filter</legend>
 
       <div className="flex items-baseline justify-between gap-2 px-2.5 pt-2">
-        <span className="text-xs font-semibold text-slate-900 dark:text-neutral-100">
+        <span className="text-xs font-semibold text-stone-900 dark:text-neutral-100">
           {label}
           {selectedCount > 0 && (
             <span className="ml-1.5 rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-medium text-white">
@@ -89,13 +89,13 @@ export function MultiSelectFilter({
             </span>
           )}
         </span>
-        <span className="text-[11px] tabular-nums text-slate-400 dark:text-neutral-500">
+        <span className="text-[11px] tabular-nums text-stone-500 dark:text-neutral-500">
           {view.availableCount} available
         </span>
       </div>
 
       {disabled && disabledReason !== undefined && (
-        <p className="px-2.5 pb-2 pt-1 text-[11px] text-slate-500 dark:text-neutral-400">
+        <p className="px-2.5 pb-2 pt-1 text-[11px] text-stone-500 dark:text-neutral-400">
           {disabledReason}
         </p>
       )}
@@ -157,7 +157,7 @@ export function MultiSelectFilter({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={`Search ${label.toLowerCase()}…`}
-              className="w-full rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-neutral-700 dark:bg-neutral-800 dark:placeholder:text-neutral-500"
+              className="w-full rounded border border-stone-200 bg-stone-50 px-2 py-1 text-xs placeholder:text-stone-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-neutral-700 dark:bg-neutral-800 dark:placeholder:text-neutral-500"
             />
           </div>
 
@@ -172,7 +172,7 @@ export function MultiSelectFilter({
                   ...selectAllTarget,
                 ])
               }
-              className="text-blue-600 hover:underline disabled:text-slate-300 disabled:no-underline dark:text-blue-400 dark:disabled:text-neutral-700"
+              className="text-blue-600 hover:underline disabled:text-stone-400 disabled:no-underline dark:text-blue-400 dark:disabled:text-neutral-700"
             >
               {deferredQuery.trim().length > 0
                 ? `Select ${selectAllTarget.length} matching`
@@ -182,7 +182,7 @@ export function MultiSelectFilter({
               type="button"
               disabled={selectedCount === 0}
               onClick={() => onClear(view.dimension)}
-              className="text-slate-500 hover:underline disabled:text-slate-300 disabled:no-underline dark:text-neutral-400 dark:disabled:text-neutral-700"
+              className="text-stone-500 hover:underline disabled:text-stone-400 disabled:no-underline dark:text-neutral-400 dark:disabled:text-neutral-700"
             >
               Clear
             </button>
@@ -195,7 +195,7 @@ export function MultiSelectFilter({
             }`}
           >
             {filtered.length === 0 && (
-              <li className="px-1 py-2 text-[11px] text-slate-400 dark:text-neutral-500">
+              <li className="px-1 py-2 text-[11px] text-stone-500 dark:text-neutral-500">
                 {view.options.length === 0
                   ? 'Nothing available under the filters above.'
                   : 'No matches.'}
@@ -205,7 +205,7 @@ export function MultiSelectFilter({
             {filtered.map((option) => (
               <li key={option.value}>
                 <label
-                  className={`flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-slate-50 dark:hover:bg-neutral-800 ${
+                  className={`flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-stone-50 dark:hover:bg-neutral-800 ${
                     // Zero-count options stay visible and selectable. Hiding
                     // them makes the list shift under the user mid-task, and
                     // "exists but not under your current filters" is useful.
@@ -218,11 +218,11 @@ export function MultiSelectFilter({
                     onChange={() => onToggle(view.dimension, option.value)}
                     className="h-3.5 w-3.5 shrink-0 accent-blue-600"
                   />
-                  <span className="flex-1 truncate text-xs text-slate-700 dark:text-neutral-300">
+                  <span className="flex-1 truncate text-xs text-stone-700 dark:text-neutral-300">
                     {option.value}
                   </span>
                   <span
-                    className="shrink-0 tabular-nums text-[11px] text-slate-400 dark:text-neutral-500"
+                    className="shrink-0 tabular-nums text-[11px] text-stone-500 dark:text-neutral-500"
                     aria-label={`${option.count} records`}
                   >
                     {option.count}

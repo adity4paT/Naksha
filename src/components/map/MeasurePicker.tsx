@@ -54,7 +54,7 @@ export function MeasurePicker({
   const selectId = useId();
 
   return (
-    <div className="w-64">
+    <div className="w-full shrink-0 rounded-lg border border-stone-200 bg-white p-3">
       <label
         htmlFor={selectId}
         className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400"
