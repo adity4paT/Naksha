@@ -46,6 +46,7 @@ export function AppShell() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('chart');
   const [viewsOpen, setViewsOpen] = useState(true);
+  const [filtersOpen, setFiltersOpen] = useState(true);
   const [attempt, setAttempt] = useState(0);
 
   useUrlSync();
@@ -143,6 +144,16 @@ export function AppShell() {
     () => [...derived.aggregation.byRegion.values()],
     [derived.aggregation],
   );
+
+  // Active constraint count, so collapsing the panel never hides the fact
+  // that filters are applied. A user reading a total off a map they think is
+  // unfiltered is the failure this guards against.
+  const activeFilters =
+    selections.business.length +
+    selections.state.length +
+    selections.district.length +
+    selections.site.length +
+    Object.keys(selections.ranges).length;
 
   const hasBoundaries = boundaries.status === 'ready';
   const selectedRegion = focusedState(selections);
@@ -272,16 +283,75 @@ export function AppShell() {
 
       {/* ---- body ---- */}
       <div className="flex min-h-0 flex-1">
+        {/*
+          Collapsible, because the map is the point of the screen and 288px of
+          filters is a lot of it on a 13" laptop.
+
+          Collapsed it becomes a rail rather than disappearing: the toggle stays
+          reachable and the active-filter count stays visible. A panel that
+          vanishes completely would let someone read a total off a map they
+          believe is unfiltered.
+
+          Hidden below tablet width rather than redesigned as a bottom sheet.
+          This is a desk tool; a half-working phone layout is worse than none.
+        */}
         {workbook !== null && (
-          // Hidden below tablet width rather than redesigned as a bottom sheet.
-          // This is a desk tool; a phone layout is not worth V1's time, and a
-          // half-working one is worse than none.
-          <div className="hidden md:block">
-            <FilterPanel rows={derived.facetRows} measures={derived.rangeMeasures} />
+          <div className="hidden md:flex">
+            {filtersOpen ? (
+              <div className="relative flex">
+                <FilterPanel rows={derived.facetRows} measures={derived.rangeMeasures} />
+                <button
+                  type="button"
+                  onClick={() => setFiltersOpen(false)}
+                  aria-expanded={true}
+                  aria-controls="filter-panel"
+                  title="Hide filters"
+                  className="absolute right-0 top-2 z-10 rounded-l border border-r-0 border-stone-300 bg-white px-1 py-2 text-[10px] text-stone-500 hover:bg-stone-100 hover:text-stone-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-600"
+                >
+                  ◀
+                </button>
+              </div>
+            ) : (
+              <div className="flex w-10 shrink-0 flex-col items-center gap-2 border-r border-stone-200 bg-stone-50 py-2">
+                <button
+                  type="button"
+                  onClick={() => setFiltersOpen(true)}
+                  aria-expanded={false}
+                  aria-controls="filter-panel"
+                  title="Show filters"
+                  className="rounded border border-stone-300 bg-white px-1 py-2 text-[10px] text-stone-600 hover:bg-stone-100 hover:text-stone-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-600"
+                >
+                  ▶
+                </button>
+
+                <span
+                  className="text-[10px] font-semibold uppercase tracking-wide text-stone-500"
+                  style={{ writingMode: 'vertical-rl' }}
+                >
+                  Filters
+                </span>
+
+                {activeFilters > 0 && (
+                  <span
+                    title={`${activeFilters} filter${activeFilters === 1 ? '' : 's'} active`}
+                    className="rounded-full bg-sky-700 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white"
+                  >
+                    {activeFilters}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         )}
 
-        <main className="flex min-w-0 flex-1 flex-col gap-3 p-3">
+        {/*
+          min-h-0 is load-bearing, not defensive. A flex item defaults to
+          min-height:auto, which means it refuses to shrink below its content
+          — so without this <main> grows past the viewport, the panes below
+          never get a bounded height, and their overflow-y-auto has nothing to
+          scroll against.
+        */}
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 p-3">
           {/*
             The map gets the dominant share AND a hard floor. Sharing space
             3:2 with the supporting views left it about 340px tall on a laptop,
@@ -332,7 +402,12 @@ export function AppShell() {
                 </button>
               </div>
 
-              <div className={viewsOpen ? 'min-h-0 flex-1' : 'hidden'}>
+              {/*
+                A flex container, so the view inside becomes a flex item with
+                a bounded height. As a plain block its child would size to
+                content and spill out of the panel.
+              */}
+              <div className={viewsOpen ? 'flex min-h-0 flex-1' : 'hidden'}>
                 {tab === 'chart' ? (
                   <TopRegionsChart
                     regions={regions}

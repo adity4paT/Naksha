@@ -60,7 +60,7 @@ export function FilterChips({
 
   if (chipCount === 0) {
     return (
-      <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-neutral-400">
+      <div className="flex items-center gap-2 text-xs text-stone-500 dark:text-neutral-400">
         <span>No filters</span>
         <span className="tabular-nums">
           · showing all {total.toLocaleString('en-IN')} records
@@ -71,12 +71,12 @@ export function FilterChips({
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-xs tabular-nums text-slate-600 dark:text-neutral-300">
+      <span className="text-xs tabular-nums text-stone-600 dark:text-neutral-300">
         <strong className="font-semibold">{matched.toLocaleString('en-IN')}</strong> of{' '}
         {total.toLocaleString('en-IN')} records
       </span>
 
-      <span aria-hidden="true" className="text-slate-300 dark:text-neutral-600">
+      <span aria-hidden="true" className="text-stone-300 dark:text-neutral-600">
         |
       </span>
 
@@ -91,7 +91,7 @@ export function FilterChips({
               className={
                 isOrphan
                   ? 'inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 py-0.5 pl-2 pr-1 text-[11px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200'
-                  : 'inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 py-0.5 pl-2 pr-1 text-[11px] text-slate-700 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200'
+                  : 'inline-flex items-center gap-1 rounded-full border border-stone-200 bg-stone-50 py-0.5 pl-2 pr-1 text-[11px] text-stone-700 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200'
               }
               title={
                 isOrphan
@@ -99,7 +99,7 @@ export function FilterChips({
                   : undefined
               }
             >
-              <span className="text-slate-400 dark:text-neutral-500">
+              <span className="text-stone-500 dark:text-neutral-500">
                 {DIMENSION_LABELS[dimension]}
               </span>
               <span className={isOrphan ? 'line-through decoration-amber-500' : ''}>
@@ -111,13 +111,13 @@ export function FilterChips({
                 </span>
               )}
               {!isActive && !isOrphan && (
-                <span className="text-[9px] text-slate-400">inactive</span>
+                <span className="text-[9px] text-stone-500">inactive</span>
               )}
               <button
                 type="button"
                 onClick={() => onRemove(dimension, value)}
                 aria-label={`Remove ${DIMENSION_LABELS[dimension]} filter ${value}`}
-                className="rounded-full px-1 text-slate-400 hover:bg-slate-200 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-100"
+                className="rounded-full px-1 text-stone-500 hover:bg-stone-200 hover:text-stone-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-100"
               >
                 ✕
               </button>
@@ -131,9 +131,9 @@ export function FilterChips({
         return (
           <span
             key={`range-${key}`}
-            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 py-0.5 pl-2 pr-1 text-[11px] text-slate-700 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200"
+            className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-stone-50 py-0.5 pl-2 pr-1 text-[11px] text-stone-700 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200"
           >
-            <span className="text-slate-400 dark:text-neutral-500">
+            <span className="text-stone-500 dark:text-neutral-500">
               {bound?.label ?? key}
             </span>
             <span className="tabular-nums">
@@ -143,7 +143,7 @@ export function FilterChips({
               type="button"
               onClick={() => onClearRange(key)}
               aria-label={`Remove ${bound?.label ?? key} range filter`}
-              className="rounded-full px-1 text-slate-400 hover:bg-slate-200 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-100"
+              className="rounded-full px-1 text-stone-500 hover:bg-stone-200 hover:text-stone-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-100"
             >
               ✕
             </button>
