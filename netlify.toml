@@ -1,0 +1,41 @@
+# Netlify deployment.
+#
+# The app is a Next.js STATIC EXPORT, not a server build. `next build` with
+# `output: 'export'` writes a plain `out/` directory, and that is what gets
+# published — no Next.js runtime, no serverless functions, no adapter plugin.
+#
+# Publishing `.next/` instead is what produces a site-wide 404: that directory
+# holds a server bundle, not servable HTML.
+
+[build]
+  command = "npm run build"
+  publish = "out"
+
+[build.environment]
+  NODE_VERSION = "22"
+  # The opt-out is stored per-machine and does not travel with the repo, so it
+  # has to be set again for the build container. See CLAUDE.md.
+  NEXT_TELEMETRY_DISABLED = "1"
+
+# The app is a single client-rendered route. Any deep link — including a
+# shared filtered URL carrying a query string — must serve index.html and let
+# the client take over, rather than 404 on a path that was never a file.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# The boundary GeoJSON is content-addressed by the pinned source commit and
+# only changes when scripts/build-geo.mjs is deliberately re-run, so it is safe
+# to cache hard. Without this, every visitor re-downloads 0.6 MB of polygons.
+[[headers]]
+  for = "/geo/*.geojson"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# aliases.json is the exception: the whole point of it is that a user can edit
+# it and reload. Caching it would break the workflow it exists for.
+[[headers]]
+  for = "/geo/aliases.json"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

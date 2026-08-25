@@ -43,3 +43,6 @@ yarn-error.log*
 
 # geo build scratch (downloaded source, not committed)
 /.geo-build/
+
+# static export output
+/out/
