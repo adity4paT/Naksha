@@ -19,6 +19,8 @@ import { scaleValuesFrom } from '@/lib/aggregate';
 import type { ColorMode } from '@/lib/color';
 import { computeScale, rampFor } from '@/lib/color';
 import type { BoundaryIndex } from '@/lib/geo';
+import type { MeasureDescriptor, MeasureGroup } from '@/lib/measures';
+import { formatMeasureValue, measureUnitLabel } from '@/lib/measures';
 import {
   breadcrumbFor,
   focusedDistrict,
@@ -28,6 +30,7 @@ import {
 } from '@/store/filters';
 import { Breadcrumb } from './Breadcrumb';
 import { Legend } from './Legend';
+import { MeasurePicker } from './MeasurePicker';
 import { UnmappedPanel } from './UnmappedPanel';
 
 const MapView = dynamic(() => import('./MapView').then((m) => m.MapView), {
@@ -45,7 +48,12 @@ export interface MapDashboardProps {
   readonly stateAggregation: AggregationResult;
   /** Aggregates for the district level. */
   readonly districtAggregation: AggregationResult;
-  readonly measureLabel: string;
+  /** Every measure the picker offers, pre-grouped. */
+  readonly measureGroups: readonly MeasureGroup[];
+  /** The active measure, resolved from the store's id by the caller. */
+  readonly measure: MeasureDescriptor;
+  /** Label of the sheet column superseding the active measure, if any. */
+  readonly supersedingLabel?: string | null;
   readonly mode?: ColorMode;
 }
 
@@ -53,7 +61,9 @@ export function MapDashboard({
   boundaries,
   stateAggregation,
   districtAggregation,
-  measureLabel,
+  measureGroups,
+  measure,
+  supersedingLabel = null,
   mode = 'light',
 }: MapDashboardProps) {
   const selections = useFilterStore((s) => s.selections);
@@ -62,6 +72,7 @@ export function MapDashboard({
   const binningMethod = useFilterStore((s) => s.binningMethod);
   const binCount = useFilterStore((s) => s.binCount);
   const unmappedPanelOpen = useFilterStore((s) => s.unmappedPanelOpen);
+  const setMeasure = useFilterStore((s) => s.setMeasure);
 
   const focusState = useFilterStore((s) => s.focusState);
   const focusDistrict = useFilterStore((s) => s.focusDistrict);
@@ -91,7 +102,8 @@ export function MapDashboard({
     if (level === 'district' && selectedState !== null) {
       return [...aggregation.byRegion.values()]
         .filter((region) => region.state === selectedState)
-        .map((region) => region.total);
+        .map((region) => region.value)
+        .filter((value): value is number => value !== null);
     }
     return scaleValuesFrom(aggregation);
   }, [aggregation, level, selectedState]);
@@ -105,6 +117,14 @@ export function MapDashboard({
 
   const trail = breadcrumbFor(selections);
 
+  // Formatting follows the measure's unit, so switching to a percentage stops
+  // the legend and tooltips from appending "ac" to a figure that is not acres.
+  const formatValue = useMemo(
+    () => (value: number) => formatMeasureValue(measure, value),
+    [measure],
+  );
+  const unitLabel = measureUnitLabel(measure);
+
   const { hasNoData, hasZero } = useMemo(() => {
     const entries = level === 'state' ? boundaries.states : boundaries.districts;
     const scoped =
@@ -113,19 +133,37 @@ export function MapDashboard({
         : entries;
 
     return {
-      hasNoData: scoped.some((e) => !aggregation.byRegion.has(e.name)),
-      hasZero: [...aggregation.byRegion.values()].some((r) => r.total === 0),
+      // Both flavours of no-data: region absent entirely, or present with a
+      // value that could not be computed.
+      hasNoData: scoped.some((e) => aggregation.byRegion.get(e.name)?.value == null),
+      hasZero: [...aggregation.byRegion.values()].some((r) => r.value === 0),
     };
   }, [level, boundaries, aggregation, selectedState]);
 
   return (
     <div className="flex h-full flex-col gap-2">
-      <header className="flex items-center justify-between gap-4 px-1">
-        <Breadcrumb trail={trail} onNavigate={navigateTo} />
-        <p className="text-xs text-slate-500 dark:text-neutral-400">
-          {level === 'state' ? 'States' : 'Districts'} ·{' '}
-          <span className="tabular-nums">{aggregation.byRegion.size}</span> with data
-        </p>
+      <header className="flex items-start justify-between gap-4 px-1">
+        <div className="flex flex-col gap-1">
+          <Breadcrumb trail={trail} onNavigate={navigateTo} />
+          <p className="text-xs text-slate-500 dark:text-neutral-400">
+            {level === 'state' ? 'States' : 'Districts'} ·{' '}
+            <span className="tabular-nums">
+              {
+                [...aggregation.byRegion.values()].filter((r) => r.value !== null)
+                  .length
+              }
+            </span>{' '}
+            with a value
+          </p>
+        </div>
+
+        <MeasurePicker
+          groups={measureGroups}
+          selectedId={measure.id}
+          onChange={setMeasure}
+          selected={measure}
+          supersedingLabel={supersedingLabel}
+        />
       </header>
 
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-slate-200 dark:border-neutral-800">
@@ -136,7 +174,8 @@ export function MapDashboard({
           ramp={ramp}
           mode={mode}
           level={level}
-          measureLabel={measureLabel}
+          measureLabel={measure.label}
+          formatValue={formatValue}
           selectedState={selectedState}
           selectedDistrict={selectedDistrict}
           onSelectState={focusState}
@@ -150,7 +189,9 @@ export function MapDashboard({
             scale={scale}
             ramp={ramp}
             mode={mode}
-            measureLabel={measureLabel}
+            measureLabel={measure.label}
+            unitLabel={unitLabel}
+            formatValue={formatValue}
             method={binningMethod}
             onMethodChange={setBinningMethod}
             hasNoDataRegions={hasNoData}

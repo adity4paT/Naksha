@@ -17,7 +17,6 @@ import { useEffect, useRef } from 'react';
 import type { BinCount, BinningMethod, ScaleKind } from '@/lib/color';
 import { readFromLocation, writeToLocation } from '@/lib/filters';
 import { useFilterStore } from '@/store/filters';
-import type { NormalizedKey } from '@/types/schema';
 
 /** Debounce for URL writes, in ms. */
 export const URL_DEBOUNCE_MS = 300;
@@ -36,7 +35,7 @@ export function useUrlSync(): void {
   const setUrlTruncated = useFilterStore((s) => s.setUrlTruncated);
 
   const selections = useFilterStore((s) => s.selections);
-  const measureKey = useFilterStore((s) => s.measureKey);
+  const measureId = useFilterStore((s) => s.measureId);
   const binningMethod = useFilterStore((s) => s.binningMethod);
   const binCount = useFilterStore((s) => s.binCount);
   const scaleKind = useFilterStore((s) => s.scaleKind);
@@ -58,7 +57,7 @@ export function useUrlSync(): void {
     hydrate({
       selections: parsed.selections,
       ...(parsed.measureKey !== null && parsed.measureKey.length > 0
-        ? { measureKey: parsed.measureKey as NormalizedKey }
+        ? { measureId: parsed.measureKey }
         : {}),
       ...(parsed.binningMethod !== null && BINNING_METHODS.has(parsed.binningMethod)
         ? { binningMethod: parsed.binningMethod as BinningMethod }
@@ -83,7 +82,7 @@ export function useUrlSync(): void {
     timer.current = setTimeout(() => {
       const truncated = writeToLocation({
         selections,
-        measureKey,
+        measureKey: measureId,
         binningMethod,
         binCount,
         scaleKind,
@@ -94,5 +93,5 @@ export function useUrlSync(): void {
     return () => {
       if (timer.current !== null) clearTimeout(timer.current);
     };
-  }, [selections, measureKey, binningMethod, binCount, scaleKind, setUrlTruncated]);
+  }, [selections, measureId, binningMethod, binCount, scaleKind, setUrlTruncated]);
 }

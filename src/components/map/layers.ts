@@ -109,14 +109,17 @@ export interface LayerBuildContext {
  *
  * Three-way branch, and the ordering is the whole point:
  *
- *   1. no `hasData` state at all → the no-data base colour, drawn with a hatch
- *      overlay by a separate layer.
- *   2. `hasData` but the total is exactly 0 → the dedicated zero colour.
+ *   1. no `hasData` state → the no-data base colour, hatched by an overlay.
+ *   2. `hasData` but the value is exactly 0 → the dedicated zero colour.
  *   3. otherwise → the bin colour.
  *
- * Cases 1 and 2 are different facts. A district with no records and a district
- * with 0 acres recorded must not render identically, and the natural
+ * Cases 1 and 2 are different facts. A district with no computable figure and a
+ * district with a recorded 0 must not render identically, and the natural
  * implementation — `coalesce(value, 0)` — collapses them.
+ *
+ * `hasData` is set only when the aggregate value is NON-NULL, so a region whose
+ * sites all have zero total area lands in case 1 when a percentage is selected:
+ * "no data", not "0% utilised".
  */
 function fillColorExpression(context: LayerBuildContext): unknown[] {
   const { mode, ramp } = context;
@@ -169,6 +172,11 @@ export function buildLayers(context: LayerBuildContext): readonly RegisteredLaye
         layout: { visibility: !showDistricts ? 'visible' : 'none' },
         paint: {
           'fill-color': fillColorExpression(context) as never,
+          // Animate recolouring rather than swapping instantly. Changing the
+          // measure repaints every region at once, and a hard cut gives the eye
+          // nothing to track — 250ms is long enough to see WHICH regions moved
+          // and short enough not to feel like waiting.
+          'fill-color-transition': { duration: 250, delay: 0 },
           // Hover is a fill-opacity lift rather than a colour change, so the
           // bin a region belongs to stays readable while pointing at it.
           'fill-opacity': [
@@ -219,6 +227,11 @@ export function buildLayers(context: LayerBuildContext): readonly RegisteredLaye
         ...(selectedState !== null ? { filter: ['==', ['get', 'state'], selectedState] } : {}),
         paint: {
           'fill-color': fillColorExpression(context) as never,
+          // Animate recolouring rather than swapping instantly. Changing the
+          // measure repaints every region at once, and a hard cut gives the eye
+          // nothing to track — 250ms is long enough to see WHICH regions moved
+          // and short enough not to feel like waiting.
+          'fill-color-transition': { duration: 250, delay: 0 },
           'fill-opacity': [
             'case',
             ['boolean', ['feature-state', 'hover'], false],

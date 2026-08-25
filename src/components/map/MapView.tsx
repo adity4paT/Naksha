@@ -49,6 +49,8 @@ export interface MapViewProps {
   readonly mode: ColorMode;
   readonly level: 'state' | 'district';
   readonly measureLabel: string;
+  /** Formats a value in the active measure's unit. */
+  readonly formatValue: (value: number) => string;
   readonly selectedState: string | null;
   readonly selectedDistrict: string | null;
   readonly onSelectState: (name: string) => void;
@@ -65,6 +67,7 @@ export function MapView({
   mode,
   level,
   measureLabel,
+  formatValue,
   selectedState,
   selectedDistrict,
   onSelectState,
@@ -240,14 +243,18 @@ export function MapView({
 
     for (const [name, id] of lookup) {
       const region = aggregation.byRegion.get(name);
-      if (region === undefined) continue;
+      // A region with records but a NULL value is deliberately left without
+      // feature state, so the fill expression treats it as no-data. That is the
+      // case where every site has zero total area and a percentage is
+      // undefined — "no data", never "0%".
+      if (region === undefined || region.value === null) continue;
 
       map.setFeatureState(
         { source, id },
         {
           hasData: true,
-          total: region.total,
-          binIndex: binIndexOf(scale, region.total),
+          total: region.value,
+          binIndex: binIndexOf(scale, region.value),
           siteCount: region.siteCount,
         },
       );
@@ -264,9 +271,10 @@ export function MapView({
       return {
         name,
         state,
-        // null, not 0 — "no records here" and "zero acres here" are different
-        // facts and the tooltip says which.
-        total: region?.total ?? null,
+        // null, not 0. Covers both "no records here" and "records but no
+        // computable figure" — the tooltip says "no data" for each, which is
+        // accurate for both and false for neither.
+        total: region?.value ?? null,
         siteCount: region?.siteCount ?? 0,
         recordCount: region?.recordCount ?? 0,
       };
@@ -386,13 +394,15 @@ export function MapView({
         : entries;
 
     return scoped
-      .filter((e) => !aggregation.byRegion.has(e.name))
+      .filter((e) => aggregation.byRegion.get(e.name)?.value == null)
       .map((e) => ({ name: e.name, state: e.state }));
   }, [level, boundaries, aggregation, selectedState]);
 
   const visibleRegions = useMemo(
     () =>
-      [...aggregation.byRegion.values()].sort((a, b) => b.total - a.total),
+      [...aggregation.byRegion.values()].sort(
+        (a, b) => (b.value ?? -Infinity) - (a.value ?? -Infinity),
+      ),
     [aggregation],
   );
 
@@ -440,12 +450,18 @@ export function MapView({
         onOpenSiteList={onOpenSiteList}
       />
 
-      <RegionTooltip datum={tooltip} position={tooltipAt} measureLabel={measureLabel} />
+      <RegionTooltip
+        datum={tooltip}
+        position={tooltipAt}
+        measureLabel={measureLabel}
+        formatValue={formatValue}
+      />
 
       <RegionKeyboardList
         regions={visibleRegions}
         noDataRegions={noDataRegions}
         measureLabel={measureLabel}
+        formatValue={formatValue}
         levelLabel={level === 'state' ? 'State' : 'District'}
         onFocusRegion={handleFocusRegion}
         onSelectRegion={level === 'state' ? onSelectState : onSelectDistrict}

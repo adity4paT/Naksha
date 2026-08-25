@@ -24,6 +24,10 @@ export interface LegendProps {
   readonly mode: ColorMode;
   /** Measure name for the legend title. */
   readonly measureLabel: string;
+  /** Unit word for the subtitle, e.g. "acres" or "percent". */
+  readonly unitLabel: string;
+  /** Formats a bin edge in the active measure's unit. */
+  readonly formatValue: (value: number) => string;
   readonly method: BinningMethod;
   readonly onMethodChange: (method: BinningMethod) => void;
   /** True when at least one visible region has no data. */
@@ -32,17 +36,13 @@ export interface LegendProps {
   readonly hasZeroRegions: boolean;
 }
 
-/** Acre figures, grouped Indian-style, with decimals only when they carry meaning. */
-function formatAcres(value: number): string {
-  const rounded = Math.abs(value) < 10 ? Math.round(value * 100) / 100 : Math.round(value);
-  return rounded.toLocaleString('en-IN');
-}
-
 export function Legend({
   scale,
   ramp,
   mode,
   measureLabel,
+  unitLabel,
+  formatValue,
   method,
   onMethodChange,
   hasNoDataRegions,
@@ -56,11 +56,11 @@ export function Legend({
         // the same way would claim the maximum belongs to no class.
         label:
           index === scale.bins.length - 1
-            ? `${formatAcres(bin.min)} – ${formatAcres(bin.max)}`
-            : `${formatAcres(bin.min)} – <${formatAcres(bin.max)}`,
+            ? `${formatValue(bin.min)} – ${formatValue(bin.max)}`
+            : `${formatValue(bin.min)} – <${formatValue(bin.max)}`,
         count: bin.count,
       })),
-    [scale, ramp],
+    [scale, ramp, formatValue],
   );
 
   return (
@@ -71,7 +71,7 @@ export function Legend({
       <h2 className="mb-0.5 font-semibold text-slate-900 dark:text-neutral-100">
         {measureLabel}
       </h2>
-      <p className="mb-2 text-[11px] text-slate-500 dark:text-neutral-400">acres</p>
+      <p className="mb-2 text-[11px] text-slate-500 dark:text-neutral-400">{unitLabel}</p>
 
       <ul className="space-y-1">
         {rows.map((row) => (
@@ -104,7 +104,9 @@ export function Legend({
               className="h-3.5 w-3.5 shrink-0 rounded-sm ring-1 ring-black/10 dark:ring-white/10"
               style={{ backgroundColor: ZERO_VALUE[mode] }}
             />
-            <span className="flex-1 text-slate-700 dark:text-neutral-300">0 acres</span>
+            <span className="flex-1 text-slate-700 dark:text-neutral-300">
+              Exactly {formatValue(0)}
+            </span>
           </li>
         )}
 

@@ -31,19 +31,29 @@ export interface TooltipDatum {
   readonly recordCount: number;
 }
 
+/**
+ * Formats one value in the active measure's unit.
+ *
+ * Injected rather than hardcoded: the map can now show acres or percentages,
+ * and a tooltip that appended "ac" to a utilisation figure would be confidently
+ * wrong in a way nobody double-checks.
+ */
+export type ValueFormatter = (value: number) => string;
+
 export interface RegionTooltipProps {
   readonly datum: TooltipDatum | null;
   /** Viewport position, in px. Null when driven by keyboard focus. */
   readonly position: { x: number; y: number } | null;
   readonly measureLabel: string;
-}
-
-function formatAcres(value: number): string {
-  return Math.round(value).toLocaleString('en-IN');
+  readonly formatValue: ValueFormatter;
 }
 
 /** The sentence a region's figures reduce to. Shared by tooltip and a11y label. */
-export function describeRegion(datum: TooltipDatum, measureLabel: string): string {
+export function describeRegion(
+  datum: TooltipDatum,
+  measureLabel: string,
+  formatValue: ValueFormatter,
+): string {
   const sites = `${datum.siteCount} site${datum.siteCount === 1 ? '' : 's'}`;
 
   if (datum.total === null) {
@@ -51,10 +61,15 @@ export function describeRegion(datum: TooltipDatum, measureLabel: string): strin
     return `${datum.name}: no data`;
   }
 
-  return `${datum.name}: ${formatAcres(datum.total)} acres ${measureLabel}, ${sites}`;
+  return `${datum.name}: ${formatValue(datum.total)} ${measureLabel}, ${sites}`;
 }
 
-export function RegionTooltip({ datum, position, measureLabel }: RegionTooltipProps) {
+export function RegionTooltip({
+  datum,
+  position,
+  measureLabel,
+  formatValue,
+}: RegionTooltipProps) {
   if (datum === null || position === null) return null;
 
   return (
@@ -78,7 +93,9 @@ export function RegionTooltip({ datum, position, measureLabel }: RegionTooltipPr
         <p className="mt-1 text-slate-500 dark:text-neutral-400">
           No data
           <span className="block text-[11px]">
-            No records resolved to this region
+            {datum.recordCount > 0
+              ? `${datum.recordCount} record${datum.recordCount === 1 ? '' : 's'} here, but this measure cannot be computed for them`
+              : 'No records resolved to this region'}
           </span>
         </p>
       ) : (
@@ -86,7 +103,7 @@ export function RegionTooltip({ datum, position, measureLabel }: RegionTooltipPr
           <div className="flex justify-between gap-4">
             <dt className="text-slate-500 dark:text-neutral-400">{measureLabel}</dt>
             <dd className="tabular-nums font-medium text-slate-900 dark:text-neutral-100">
-              {formatAcres(datum.total)} ac
+              {formatValue(datum.total)}
             </dd>
           </div>
           <div className="flex justify-between gap-4">
@@ -106,6 +123,7 @@ export interface RegionKeyboardListProps {
   /** Regions with geometry but no records, so they are reachable too. */
   readonly noDataRegions: readonly { name: string; state: string }[];
   readonly measureLabel: string;
+  readonly formatValue: ValueFormatter;
   readonly onFocusRegion: (name: string | null) => void;
   readonly onSelectRegion: (name: string) => void;
   readonly levelLabel: string;
@@ -123,6 +141,7 @@ export function RegionKeyboardList({
   regions,
   noDataRegions,
   measureLabel,
+  formatValue,
   onFocusRegion,
   onSelectRegion,
   levelLabel,
@@ -140,7 +159,7 @@ export function RegionKeyboardList({
           const datum: TooltipDatum = {
             name: region.name,
             state: region.state,
-            total: region.total,
+            total: region.value,
             siteCount: region.siteCount,
             recordCount: region.recordCount,
           };
@@ -153,7 +172,7 @@ export function RegionKeyboardList({
                 onBlur={() => onFocusRegion(null)}
                 onClick={() => onSelectRegion(region.name)}
               >
-                {describeRegion(datum, measureLabel)}
+                {describeRegion(datum, measureLabel, formatValue)}
               </button>
             </li>
           );

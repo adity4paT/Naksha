@@ -29,3 +29,6 @@ export type { SiteBadgesProps } from './SiteBadges';
 
 export { MapDashboard } from './MapDashboard';
 export type { MapDashboardProps } from './MapDashboard';
+
+export { MeasurePicker } from './MeasurePicker';
+export type { MeasurePickerProps } from './MeasurePicker';

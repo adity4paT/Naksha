@@ -1,16 +1,22 @@
 /**
  * Aggregating resolved records into per-region figures for the choropleth.
  *
- * The distinction this module exists to preserve: a region with **no records**
- * is not a region with **zero acres**. Both would sum to 0, and collapsing them
- * would make the map assert a fact the data does not contain. Regions with no
- * records simply never appear in the output map, and the map layer paints
- * whatever is absent with the no-data hatch.
+ * Two distinctions this module exists to preserve, both of which collapse under
+ * the obvious implementation:
+ *
+ * 1. **No records ≠ zero.** A region with no records is simply absent from the
+ *    output map; the map layer paints absence with the no-data hatch.
+ * 2. **No computable value ≠ zero.** A region can have records and still have
+ *    no figure — every one of its sites having zero total area makes utilisation
+ *    undefined. So {@link RegionAggregate.value} is nullable, and `null` reaches
+ *    the map as no-data rather than as 0%.
  */
 
+import { aggregateMeasure, recordValue } from '@/lib/measures';
+import type { MeasureDescriptor } from '@/lib/measures';
 import type { RecordResolution } from '@/lib/geo';
-import type { CellValue, NormalizedKey, ParsedRecord } from '@/types/schema';
 import { parseMeasure } from '@/lib/ingest';
+import type { CellValue, NormalizedKey, ParsedRecord } from '@/types/schema';
 
 /** Aggregated figures for one administrative region. */
 export interface RegionAggregate {
@@ -19,8 +25,21 @@ export interface RegionAggregate {
   /** Parent state. Equals `name` at state level. */
   readonly state: string;
   readonly level: 'state' | 'district';
-  /** Sum of the active measure, in acres. */
-  readonly total: number;
+  /**
+   * The active measure, aggregated by its own strategy.
+   *
+   * `null` means "cannot be computed here" — distinct both from zero and from
+   * the region being absent entirely.
+   */
+  readonly value: number | null;
+  /**
+   * Acreage of the bound total-area column, regardless of the active measure.
+   *
+   * Kept separate because "how much land is this" is a different question from
+   * "what does the current choropleth say", and the unmapped panel needs the
+   * former even when the map is showing a percentage.
+   */
+  readonly acres: number;
   /** Records contributing. */
   readonly recordCount: number;
   /**
@@ -37,13 +56,13 @@ export interface RegionAggregate {
 
 /** Everything the map needs for one level, plus what it could not place. */
 export interface AggregationResult {
-  /** Keyed by canonical region name. Absent key means no data, never zero. */
+  /** Keyed by canonical region name. Absent key means no records, never zero. */
   readonly byRegion: ReadonlyMap<string, RegionAggregate>;
   /** Records that resolved to no boundary at this level. */
   readonly unmapped: readonly UnmappedEntry[];
-  /** Total acreage in `unmapped`. Drives the panel's running total. */
+  /** Total ACREAGE in `unmapped`. Drives the panel's running total. */
   readonly unmappedTotal: number;
-  /** Total acreage placed on the map. */
+  /** Total ACREAGE placed on the map. */
   readonly mappedTotal: number;
 }
 
@@ -51,24 +70,30 @@ export interface AggregationResult {
 export interface UnmappedEntry {
   readonly recordId: string;
   readonly sourceRowNumber: number;
-  /** Raw spreadsheet state value. */
   readonly rawState: string | null;
-  /** Raw spreadsheet district value. */
   readonly rawDistrict: string | null;
-  /** Site name, when the workbook has a site column. */
   readonly siteName: string | null;
-  /** Acreage of the active measure. Never omitted — the panel must total it. */
+  /**
+   * Acreage, from the bound total-area column — NOT the active measure.
+   *
+   * The panel's job is "how much land is missing from this map", and that is an
+   * acreage question whatever the choropleth happens to be showing. Summing the
+   * active measure would make the total read "12,430%" when a percentage is
+   * selected, which is meaningless.
+   */
   readonly acres: number;
-  /** Why it could not be placed, for display. */
+  /** The active measure's value for this record, for the detail column. */
+  readonly value: number | null;
   readonly reason: string;
 }
 
 /** Column bindings the aggregator needs. All discovered, none hardcoded. */
 export interface AggregationColumns {
-  readonly measureKey: NormalizedKey;
   readonly siteKey: NormalizedKey | null;
   readonly stateKey: NormalizedKey | null;
   readonly districtKey: NormalizedKey | null;
+  /** Total-area column, for acreage totals independent of the active measure. */
+  readonly areaKey: NormalizedKey | null;
 }
 
 const asString = (value: CellValue | undefined): string | null =>
@@ -87,20 +112,26 @@ export function aggregateByRegion(
   records: readonly ParsedRecord[],
   resolutions: readonly RecordResolution[],
   columns: AggregationColumns,
+  measure: MeasureDescriptor,
   level: 'state' | 'district',
 ): AggregationResult {
-  const byRegion = new Map<string, RegionAggregate>();
-  const siteSets = new Map<string, Set<string>>();
+  const grouped = new Map<
+    string,
+    { state: string; records: ParsedRecord[]; sites: Set<string>; acres: number }
+  >();
   const unmapped: UnmappedEntry[] = [];
 
   let mappedTotal = 0;
   let unmappedTotal = 0;
 
+  const acresOf = (record: ParsedRecord): number =>
+    columns.areaKey === null ? 0 : (parseMeasure(record.values[columns.areaKey]) ?? 0);
+
   records.forEach((record, index) => {
     const resolution = resolutions[index];
     if (resolution === undefined) return;
 
-    const acres = parseMeasure(record.values[columns.measureKey]) ?? 0;
+    const acres = acresOf(record);
     const siteName =
       columns.siteKey === null ? null : asString(record.values[columns.siteKey]);
 
@@ -119,6 +150,7 @@ export function aggregateByRegion(
             : asString(record.values[columns.districtKey]),
         siteName,
         acres,
+        value: recordValue(measure, record.values),
         reason:
           level === 'state'
             ? resolution.state.detail
@@ -129,37 +161,59 @@ export function aggregateByRegion(
 
     mappedTotal += acres;
 
-    const key = match.name;
-    const existing = byRegion.get(key);
+    const bucket = grouped.get(match.name) ?? {
+      state: match.state,
+      records: [],
+      sites: new Set<string>(),
+      acres: 0,
+    };
 
-    const sites = siteSets.get(key) ?? new Set<string>();
+    bucket.records.push(record);
     // Fall back to the record id so a row with no site name still counts as one
     // site rather than vanishing from the badge.
-    sites.add(siteName ?? record.id);
-    siteSets.set(key, sites);
+    bucket.sites.add(siteName ?? record.id);
+    bucket.acres += acres;
 
-    byRegion.set(key, {
-      name: key,
-      state: match.state,
-      level,
-      total: (existing?.total ?? 0) + acres,
-      recordCount: (existing?.recordCount ?? 0) + 1,
-      siteCount: sites.size,
-      recordIds: [...(existing?.recordIds ?? []), record.id],
-    });
+    grouped.set(match.name, bucket);
   });
+
+  const byRegion = new Map<string, RegionAggregate>();
+
+  for (const [name, bucket] of grouped) {
+    // Aggregated from the region's records as a whole, not by combining
+    // per-record results — which is what lets a ratio measure sum its
+    // numerator and denominator separately and divide once.
+    const { value } = aggregateMeasure(
+      measure,
+      bucket.records.map((record) => record.values),
+    );
+
+    byRegion.set(name, {
+      name,
+      state: bucket.state,
+      level,
+      value,
+      acres: bucket.acres,
+      recordCount: bucket.records.length,
+      siteCount: bucket.sites.size,
+      recordIds: bucket.records.map((record) => record.id),
+    });
+  }
 
   return { byRegion, unmapped, unmappedTotal, mappedTotal };
 }
 
 /**
- * Values for the scale, from regions that actually have data.
+ * Values for the scale, from regions where the measure is computable.
  *
- * Regions absent from `byRegion` are deliberately NOT contributed as zeros.
- * Feeding "no data" into the distribution as 0 would drag every quantile break
- * downward and change what colour real districts are painted — the map would
- * be reporting the shape of our ignorance rather than the shape of the data.
+ * Two exclusions, both deliberate. Regions absent from `byRegion` are not
+ * contributed as zeros — feeding "no data" into the distribution as 0 would
+ * drag every quantile break downward and make the map report the shape of our
+ * ignorance rather than of the data. Regions present with a `null` value are
+ * excluded for the same reason.
  */
 export function scaleValuesFrom(result: AggregationResult): number[] {
-  return [...result.byRegion.values()].map((region) => region.total);
+  return [...result.byRegion.values()]
+    .map((region) => region.value)
+    .filter((value): value is number => value !== null);
 }

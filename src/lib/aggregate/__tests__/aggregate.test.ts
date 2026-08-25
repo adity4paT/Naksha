@@ -13,6 +13,8 @@ import { describe, expect, it } from 'vitest';
 import { aggregateByRegion, scaleValuesFrom } from '..';
 import { computeScale } from '@/lib/color';
 import { buildBoundaryIndex, parseAliasMap, resolveRecord } from '@/lib/geo';
+import { buildMeasureCatalogue, findMeasure, sheetMeasureId } from '@/lib/measures';
+import type { MeasureDescriptor } from '@/lib/measures';
 import type { BoundaryFeature } from '@/lib/geo';
 import { parseWorkbook } from '@/lib/ingest';
 import type { NormalizedKey } from '@/types/schema';
@@ -41,26 +43,31 @@ function setup(measure = 'total land area') {
   );
 
   const columns = {
-    measureKey: key(measure),
     siteKey: key('site'),
     stateKey: key('state'),
     districtKey: key('district'),
+    areaKey: key('total land area'),
   };
 
-  return { workbook, resolutions, columns, index };
+  const catalogue = buildMeasureCatalogue(workbook);
+  const active =
+    findMeasure(catalogue.measures, sheetMeasureId(key(measure))) ??
+    catalogue.measures[0]!;
+
+  return { workbook, resolutions, columns, index, catalogue, measure: active };
 }
 
 describe('conservation of acreage', () => {
   it('places every acre either on the map or in the unmapped panel', () => {
-    const { workbook, resolutions, columns } = setup();
+    const { workbook, resolutions, columns, measure } = setup();
 
     const sheetTotal = workbook.records.reduce((sum, record) => {
-      const value = record.values[columns.measureKey];
+      const value = record.values[columns.areaKey!];
       return sum + (typeof value === 'number' ? value : 0);
     }, 0);
 
     for (const level of ['state', 'district'] as const) {
-      const result = aggregateByRegion(workbook.records, resolutions, columns, level);
+      const result = aggregateByRegion(workbook.records, resolutions, columns, measure, level);
       expect(result.mappedTotal + result.unmappedTotal, `level ${level}`).toBeCloseTo(
         sheetTotal,
         6,
@@ -69,15 +76,15 @@ describe('conservation of acreage', () => {
   });
 
   it('matches the known sheet total of 269,795 acres', () => {
-    const { workbook, resolutions, columns } = setup();
-    const result = aggregateByRegion(workbook.records, resolutions, columns, 'state');
+    const { workbook, resolutions, columns, measure } = setup();
+    const result = aggregateByRegion(workbook.records, resolutions, columns, measure, 'state');
 
     expect(result.mappedTotal + result.unmappedTotal).toBe(269_795);
   });
 
   it('places every record exactly once', () => {
-    const { workbook, resolutions, columns } = setup();
-    const result = aggregateByRegion(workbook.records, resolutions, columns, 'district');
+    const { workbook, resolutions, columns, measure } = setup();
+    const result = aggregateByRegion(workbook.records, resolutions, columns, measure, 'district');
 
     const placed = [...result.byRegion.values()].reduce((s, r) => s + r.recordCount, 0);
     expect(placed + result.unmapped.length).toBe(workbook.records.length);
@@ -86,8 +93,8 @@ describe('conservation of acreage', () => {
 
 describe('no data is not zero', () => {
   it('omits regions with no records rather than storing them as zero', () => {
-    const { workbook, resolutions, columns, index } = setup();
-    const result = aggregateByRegion(workbook.records, resolutions, columns, 'state');
+    const { workbook, resolutions, columns, index, measure } = setup();
+    const result = aggregateByRegion(workbook.records, resolutions, columns, measure, 'state');
 
     // The sample covers 18 states; the boundary file has 36. The other 18 must
     // be ABSENT from the map, not present with a total of 0 — the map layer
@@ -98,7 +105,7 @@ describe('no data is not zero', () => {
 
     for (const entry of index.states) {
       const region = result.byRegion.get(entry.name);
-      if (region !== undefined) expect(region.total).toBeGreaterThan(0);
+      if (region !== undefined) expect(region.value).toBeGreaterThan(0);
     }
   });
 
@@ -106,8 +113,8 @@ describe('no data is not zero', () => {
     // Feeding absent regions in as zeros would drag every quantile break
     // downward and change what colour the real districts are painted — the map
     // would be reporting the shape of our ignorance, not of the data.
-    const { workbook, resolutions, columns } = setup();
-    const result = aggregateByRegion(workbook.records, resolutions, columns, 'state');
+    const { workbook, resolutions, columns, measure } = setup();
+    const result = aggregateByRegion(workbook.records, resolutions, columns, measure, 'state');
 
     const values = scaleValuesFrom(result);
     expect(values).toHaveLength(18);
@@ -121,10 +128,10 @@ describe('no data is not zero', () => {
 
   it('retains a genuine zero as a real value', () => {
     // Forest is 0 on most rows and non-zero on four. Those zeros are data.
-    const { workbook, resolutions, columns } = setup('forest');
-    const result = aggregateByRegion(workbook.records, resolutions, columns, 'state');
+    const { workbook, resolutions, columns, measure } = setup('forest');
+    const result = aggregateByRegion(workbook.records, resolutions, columns, measure, 'state');
 
-    const zeroStates = [...result.byRegion.values()].filter((r) => r.total === 0);
+    const zeroStates = [...result.byRegion.values()].filter((r) => r.value === 0);
     expect(zeroStates.length).toBeGreaterThan(0);
     // Present in the map with a total of 0 — distinct from being absent.
     for (const state of zeroStates) {
@@ -135,8 +142,8 @@ describe('no data is not zero', () => {
 
 describe('site counts', () => {
   it('counts distinct sites, not spreadsheet rows', () => {
-    const { workbook, resolutions, columns } = setup();
-    const result = aggregateByRegion(workbook.records, resolutions, columns, 'district');
+    const { workbook, resolutions, columns, measure } = setup();
+    const result = aggregateByRegion(workbook.records, resolutions, columns, measure, 'district');
 
     const totalSites = [...result.byRegion.values()].reduce((s, r) => s + r.siteCount, 0);
     const totalRecords = [...result.byRegion.values()].reduce(
@@ -150,8 +157,8 @@ describe('site counts', () => {
   });
 
   it('gives every region with records at least one site', () => {
-    const { workbook, resolutions, columns } = setup();
-    const result = aggregateByRegion(workbook.records, resolutions, columns, 'district');
+    const { workbook, resolutions, columns, measure } = setup();
+    const result = aggregateByRegion(workbook.records, resolutions, columns, measure, 'district');
 
     for (const region of result.byRegion.values()) {
       expect(region.siteCount, region.name).toBeGreaterThan(0);
@@ -160,8 +167,8 @@ describe('site counts', () => {
   });
 
   it('groups the six Kutch sites into one badge', () => {
-    const { workbook, resolutions, columns } = setup();
-    const result = aggregateByRegion(workbook.records, resolutions, columns, 'district');
+    const { workbook, resolutions, columns, measure } = setup();
+    const result = aggregateByRegion(workbook.records, resolutions, columns, measure, 'district');
 
     const kutch = result.byRegion.get('Kutch');
     expect(kutch).toBeDefined();
@@ -176,13 +183,14 @@ describe('state level keeps district-level failures', () => {
   it('counts a record whose state resolved but whose district did not', () => {
     // Such a record is still that state's acreage. Dropping it from the state
     // view would make state totals disagree with the data table.
-    const { workbook, resolutions, columns } = setup();
+    const { workbook, resolutions, columns, measure } = setup();
 
-    const stateResult = aggregateByRegion(workbook.records, resolutions, columns, 'state');
+    const stateResult = aggregateByRegion(workbook.records, resolutions, columns, measure, 'state');
     const districtResult = aggregateByRegion(
       workbook.records,
       resolutions,
       columns,
+      measure,
       'district',
     );
 
@@ -193,8 +201,8 @@ describe('state level keeps district-level failures', () => {
 
 describe('unmapped entries', () => {
   it('always carry acreage so the panel total reconciles', () => {
-    const { workbook, resolutions, columns } = setup();
-    const result = aggregateByRegion(workbook.records, resolutions, columns, 'district');
+    const { workbook, resolutions, columns, measure } = setup();
+    const result = aggregateByRegion(workbook.records, resolutions, columns, measure, 'district');
 
     for (const entry of result.unmapped) {
       expect(Number.isFinite(entry.acres)).toBe(true);
@@ -207,7 +215,7 @@ describe('unmapped entries', () => {
 
   it('reports raw spreadsheet spellings, not canonical names', () => {
     // The user has to find these strings in their own file to fix them.
-    const { workbook, resolutions, columns } = setup();
+    const { workbook, resolutions, columns, measure } = setup();
 
     const noState = workbook.records.map(() => ({
       state: { input: 'Wakanda', normalized: 'wakanda', stage: 4 as const, match: null, confidence: 0, detail: 'x', candidates: [] },
@@ -217,7 +225,7 @@ describe('unmapped entries', () => {
       resolvedToState: false,
     }));
 
-    const result = aggregateByRegion(workbook.records, noState, columns, 'state');
+    const result = aggregateByRegion(workbook.records, noState, columns, measure, 'state');
 
     expect(result.unmapped).toHaveLength(130);
     expect(result.unmappedTotal).toBe(269_795);

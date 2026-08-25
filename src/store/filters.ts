@@ -28,7 +28,6 @@ import { create } from 'zustand';
 import type { BinCount, BinningMethod, ScaleKind } from '@/lib/color';
 import type { FilterDimension, FilterSelections, RangeSelection } from '@/lib/filters';
 import { EMPTY_SELECTIONS } from '@/lib/filters';
-import type { NormalizedKey } from '@/types/schema';
 
 /** Which administrative level the choropleth is painting. */
 export type MapLevel = 'state' | 'district';
@@ -52,7 +51,14 @@ export interface FilterState {
   readonly selections: FilterSelections;
 
   /* ---- measure & scale ---- */
-  readonly measureKey: NormalizedKey | null;
+  /**
+   * Catalogue id of the active measure, not a column key.
+   *
+   * An id because a derived measure has no column of its own — "Utilisation %"
+   * is computed from three of them. Keying on a column would make the derived
+   * measures unrepresentable in state and unshareable by URL.
+   */
+  readonly measureId: string | null;
   readonly scaleKind: ScaleKind;
   readonly binningMethod: BinningMethod;
   readonly binCount: BinCount;
@@ -79,7 +85,7 @@ export interface FilterState {
   clearRange: (key: string) => void;
 
   resetAll: () => void;
-  hydrate: (partial: Partial<Pick<FilterState, 'selections' | 'measureKey' | 'scaleKind' | 'binningMethod' | 'binCount'>>) => void;
+  hydrate: (partial: Partial<Pick<FilterState, 'selections' | 'measureId' | 'scaleKind' | 'binningMethod' | 'binCount'>>) => void;
 
   /* ---- map ---- */
   /** Drill into one state. Replaces the state selection rather than adding. */
@@ -87,7 +93,7 @@ export interface FilterState {
   focusDistrict: (district: string | null) => void;
   navigateTo: (depth: 0 | 1 | 2) => void;
 
-  setMeasure: (key: NormalizedKey) => void;
+  setMeasure: (id: string) => void;
   setScaleKind: (kind: ScaleKind) => void;
   setBinningMethod: (method: BinningMethod) => void;
   setBinCount: (count: BinCount) => void;
@@ -106,7 +112,7 @@ const withDimension = (
 export const useFilterStore = create<FilterState>((set) => ({
   selections: EMPTY_SELECTIONS,
 
-  measureKey: null,
+  measureId: null,
   scaleKind: 'sequential',
   // Quantile reads well on first load. The toggle exists because trusting it
   // without ever seeing equal-interval is being misled by the default — this
@@ -236,7 +242,7 @@ export const useFilterStore = create<FilterState>((set) => ({
       return current;
     }),
 
-  setMeasure: (measureKey) => set({ measureKey }),
+  setMeasure: (measureId) => set({ measureId }),
   setScaleKind: (scaleKind) => set({ scaleKind }),
   setBinningMethod: (binningMethod) => set({ binningMethod }),
   setBinCount: (binCount) => set({ binCount }),
