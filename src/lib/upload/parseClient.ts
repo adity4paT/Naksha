@@ -25,9 +25,14 @@ function getWorker(): Worker | null {
   try {
     // `new URL(..., import.meta.url)` is the form bundlers recognise for worker
     // entry points; a string path would not be traced and would 404 in a build.
-    worker = new Worker(new URL('../../workers/parse.worker.ts', import.meta.url), {
-      type: 'module',
-    });
+    //
+    // Deliberately a CLASSIC worker, not `{ type: 'module' }`. Webpack emits
+    // this worker's chunk with `importScripts`-based dependency loading, and
+    // `importScripts` does not exist inside a module worker — declaring one
+    // made the worker throw on its first dependency load, hit the error handler,
+    // and fall back to synchronous parsing on every single upload. The fallback
+    // made it look like it worked; it just never ran off-thread.
+    worker = new Worker(new URL('../../workers/parse.worker.ts', import.meta.url));
     return worker;
   } catch {
     workerUnavailable = true;

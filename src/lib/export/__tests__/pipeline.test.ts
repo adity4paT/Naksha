@@ -20,8 +20,8 @@ import { aggregateByRegion, scaleValuesFrom } from '@/lib/aggregate';
 import { computeScale } from '@/lib/color';
 import { applyFilters, EMPTY_SELECTIONS } from '@/lib/filters';
 import type { FacetRow, FilterSelections } from '@/lib/filters';
-import { buildBoundaryIndex, parseAliasMap, resolveRecord } from '@/lib/geo';
-import type { BoundaryFeature } from '@/lib/geo';
+import { buildBoundaryIndex, parseAliasMap } from '@/lib/geo';
+import type { BoundaryFeature, RecordResolution } from '@/lib/geo';
 import { parseWorkbook } from '@/lib/ingest';
 import { buildMeasureCatalogue, DERIVED_MEASURE_IDS, findMeasure } from '@/lib/measures';
 import { inspectBytes } from '@/lib/upload';
@@ -72,7 +72,7 @@ function pipeline(selections: FilterSelections = EMPTY_SELECTIONS, measureId?: s
 
   const keptIds = new Set(applyFilters(facetRows, selections).map((r) => r.recordId));
   const filteredRecords: ParsedRecord[] = [];
-  const filteredResolutions = [];
+  const filteredResolutions: RecordResolution[] = [];
 
   workbook.records.forEach((record, index) => {
     if (!keptIds.has(record.id)) return;
