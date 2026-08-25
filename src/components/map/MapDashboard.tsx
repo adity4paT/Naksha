@@ -15,17 +15,15 @@ import dynamic from 'next/dynamic';
 import { useMemo } from 'react';
 
 import type { AggregationResult } from '@/lib/aggregate';
-import { scaleValuesFrom } from '@/lib/aggregate';
-import type { ColorMode } from '@/lib/color';
-import { computeScale, rampFor } from '@/lib/color';
+import type { BinnedScale, ColorMode } from '@/lib/color';
 import type { BoundaryIndex } from '@/lib/geo';
 import type { MeasureDescriptor, MeasureGroup } from '@/lib/measures';
 import { formatMeasureValue, measureUnitLabel } from '@/lib/measures';
+import type { MapLevel } from '@/store/filters';
 import {
   breadcrumbFor,
   focusedDistrict,
   focusedState,
-  levelFor,
   useFilterStore,
 } from '@/store/filters';
 import { Breadcrumb } from './Breadcrumb';
@@ -44,10 +42,17 @@ const MapView = dynamic(() => import('./MapView').then((m) => m.MapView), {
 
 export interface MapDashboardProps {
   readonly boundaries: BoundaryIndex;
-  /** Aggregates for the state level. */
-  readonly stateAggregation: AggregationResult;
-  /** Aggregates for the district level. */
-  readonly districtAggregation: AggregationResult;
+  /**
+   * The active level's aggregate, already computed.
+   *
+   * Passed in rather than derived here so the map, table, and chart share one
+   * computation — see useDerivedData. Computing it locally would create the
+   * second query path that makes views disagree.
+   */
+  readonly aggregation: AggregationResult;
+  readonly scale: BinnedScale;
+  readonly ramp: readonly string[];
+  readonly level: MapLevel;
   /** Every measure the picker offers, pre-grouped. */
   readonly measureGroups: readonly MeasureGroup[];
   /** The active measure, resolved from the store's id by the caller. */
@@ -59,18 +64,17 @@ export interface MapDashboardProps {
 
 export function MapDashboard({
   boundaries,
-  stateAggregation,
-  districtAggregation,
+  aggregation,
+  scale,
+  ramp,
+  level,
   measureGroups,
   measure,
   supersedingLabel = null,
   mode = 'light',
 }: MapDashboardProps) {
   const selections = useFilterStore((s) => s.selections);
-  const zoom = useFilterStore((s) => s.zoom);
-  const scaleKind = useFilterStore((s) => s.scaleKind);
   const binningMethod = useFilterStore((s) => s.binningMethod);
-  const binCount = useFilterStore((s) => s.binCount);
   const unmappedPanelOpen = useFilterStore((s) => s.unmappedPanelOpen);
   const setMeasure = useFilterStore((s) => s.setMeasure);
 
@@ -87,34 +91,6 @@ export function MapDashboard({
   // rendering of that filter — see focusedState in the store.
   const selectedState = focusedState(selections);
   const selectedDistrict = focusedDistrict(selections);
-  const level = levelFor({ selections, zoom });
-  const aggregation = level === 'state' ? stateAggregation : districtAggregation;
-
-  /**
-   * The scale is computed from the CURRENTLY VISIBLE regions only.
-   *
-   * Drilling into Gujarat re-bins against Gujarat's districts rather than
-   * against all 724, so the ramp uses its full range on the data actually on
-   * screen. Keeping a national scale would render most of a single state in one
-   * shade and waste four of five classes.
-   */
-  const scaleValues = useMemo(() => {
-    if (level === 'district' && selectedState !== null) {
-      return [...aggregation.byRegion.values()]
-        .filter((region) => region.state === selectedState)
-        .map((region) => region.value)
-        .filter((value): value is number => value !== null);
-    }
-    return scaleValuesFrom(aggregation);
-  }, [aggregation, level, selectedState]);
-
-  const scale = useMemo(
-    () => computeScale(scaleValues, binningMethod, binCount),
-    [scaleValues, binningMethod, binCount],
-  );
-
-  const ramp = useMemo(() => rampFor(scaleKind, mode, binCount), [scaleKind, mode, binCount]);
-
   const trail = breadcrumbFor(selections);
 
   // Formatting follows the measure's unit, so switching to a percentage stops

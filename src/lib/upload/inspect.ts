@@ -6,9 +6,14 @@
  * separate module, which is the mechanism behind "never swap the dataset
  * silently". A malformed upload cannot blank the map because it never reaches
  * the map.
+ *
+ * Split into three layers so the expensive part can move off-thread while the
+ * analysis stays synchronous and testable:
+ *
+ *   inspectUpload  — validate the file, parse in a Worker, analyse
+ *   inspectBytes   — parse on this thread, analyse (tests, SSR)
+ *   analyzeWorkbook — pure; no XLSX, no I/O
  */
-
-import * as XLSX from 'xlsx';
 
 import { bindColumns, parseWorkbook } from '@/lib/ingest';
 import type { AliasMap, BoundaryIndex, RecordResolution, ResolutionReport } from '@/lib/geo';
@@ -33,6 +38,7 @@ import {
   wrongFileType,
   zeroRowsAfterCleaning,
 } from './errors';
+import { parseWorkbookAsync } from './parseClient';
 
 /** A parsed candidate, not yet loaded. */
 export interface UploadPreview {
@@ -81,53 +87,42 @@ export interface InspectOptions {
   readonly headerRowIndex?: number;
 }
 
+/** Validate the file itself, before any parsing is attempted. */
+function validateFile(name: string, size: number, bytes: Uint8Array): UploadError | null {
+  if (!hasAcceptedExtension(name)) return wrongFileType(name);
+  if (size > MAX_FILE_BYTES) return fileTooLarge(size);
+  // Checked before the parser sees it, so a renamed .xls or .csv gets a message
+  // about what the file actually is rather than the parser's internal complaint
+  // about a missing central directory.
+  if (!looksLikeZip(bytes)) return notAZip(name);
+  return null;
+}
+
 /**
- * Inspect a file.
+ * Inspect a file, parsing in a Web Worker where one is available.
  *
- * Async so the caller can render a progress state before the parse blocks the
- * main thread. The parse itself is synchronous — SheetJS offers no streaming
- * API — so a genuinely large workbook will still freeze the tab for its
- * duration; {@link MAX_FILE_BYTES} is what keeps that bounded. Moving this to a
- * Web Worker is the right fix if production files get big.
+ * The worker is what keeps a large upload from freezing the tab;
+ * {@link MAX_FILE_BYTES} still bounds memory. See `parseClient.ts` for the
+ * fallback path.
  */
 export async function inspectUpload(
   file: File,
   options: InspectOptions,
 ): Promise<UploadInspection> {
-  if (!hasAcceptedExtension(file.name)) {
-    return { ok: false, error: wrongFileType(file.name) };
-  }
-
-  if (file.size > MAX_FILE_BYTES) {
-    return { ok: false, error: fileTooLarge(file.size) };
-  }
-
   const bytes = new Uint8Array(await file.arrayBuffer());
 
-  // Checked before the parser sees it, so a renamed .xls or .csv gets a message
-  // about what the file actually is rather than the parser's internal complaint
-  // about a missing central directory.
-  if (!looksLikeZip(bytes)) {
-    return { ok: false, error: notAZip(file.name) };
-  }
+  const fileError = validateFile(file.name, file.size, bytes);
+  if (fileError !== null) return { ok: false, error: fileError };
 
-  return inspectBytes(bytes, file.name, file.size, options);
-}
-
-/** The parsing half, separated so tests can drive it from a buffer. */
-export function inspectBytes(
-  bytes: Uint8Array,
-  fileName: string,
-  fileBytes: number,
-  options: InspectOptions,
-): UploadInspection {
-  let sheetNames: readonly string[] = [];
-
+  let workbook: ParsedWorkbook;
   try {
-    // Read once up front purely to enumerate sheets, so an empty workbook can
-    // be reported as such rather than surfacing later as "zero rows".
-    const probe = XLSX.read(bytes, { type: 'array', bookSheets: true });
-    sheetNames = probe.SheetNames ?? [];
+    workbook = await parseWorkbookAsync(bytes, {
+      fileName: file.name,
+      ...(options.sheetName === undefined ? {} : { sheetName: options.sheetName }),
+      ...(options.headerRowIndex === undefined
+        ? {}
+        : { headerRowIndex: options.headerRowIndex }),
+    });
   } catch (error) {
     return {
       ok: false,
@@ -135,11 +130,18 @@ export function inspectBytes(
     };
   }
 
-  if (sheetNames.length === 0) {
-    return { ok: false, error: noTabularSheet([]) };
-  }
+  return analyzeWorkbook(workbook, file.name, file.size, options);
+}
 
+/** Synchronous path: parse on this thread, then analyse. Used by tests. */
+export function inspectBytes(
+  bytes: Uint8Array,
+  fileName: string,
+  fileBytes: number,
+  options: InspectOptions,
+): UploadInspection {
   let workbook: ParsedWorkbook;
+
   try {
     workbook = parseWorkbook(bytes, {
       fileName,
@@ -155,9 +157,25 @@ export function inspectBytes(
     };
   }
 
+  return analyzeWorkbook(workbook, fileName, fileBytes, options);
+}
+
+/**
+ * Everything after the parse: validate the shape, resolve geography, diff.
+ *
+ * Pure and synchronous, so it runs identically whether the parse happened in a
+ * worker or on this thread.
+ */
+export function analyzeWorkbook(
+  workbook: ParsedWorkbook,
+  fileName: string,
+  fileBytes: number,
+  options: InspectOptions,
+): UploadInspection {
   const populatedSheets = workbook.sheets.filter((sheet) => sheet.populatedCellCount > 0);
+
   if (populatedSheets.length === 0) {
-    return { ok: false, error: noTabularSheet(sheetNames) };
+    return { ok: false, error: noTabularSheet(workbook.sheets.map((s) => s.name)) };
   }
 
   // Header detection genuinely failed only when the fallback also yielded no
@@ -198,7 +216,6 @@ export function inspectBytes(
   );
 
   const catalogue = buildMeasureCatalogue(workbook);
-
   const cautions: string[] = [];
 
   if (workbook.header.usedFallback) {

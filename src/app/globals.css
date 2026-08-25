@@ -2,12 +2,62 @@
 @tailwind components;
 @tailwind utilities;
 
+/**
+ * Light, formal palette.
+ *
+ * Warm neutrals (stone) rather than cool greys, with a single restrained blue
+ * for interaction. The surfaces are near-white but not pure white, so the
+ * choropleth's lightest data class still reads as a fill rather than as paper —
+ * which is the same reason the sequential ramp starts at step 250 instead of
+ * 100.
+ */
 :root {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+
+  /* Surfaces, from the documented chart-chrome scale. */
+  --surface-page: #f9f9f7;
+  --surface-card: #fcfcfb;
+  --border-hairline: #e1e0d9;
+
+  --ink-primary: #0b0b0b;
+  --ink-secondary: #52514e;
+  --ink-muted: #898781;
 }
 
 html,
 body {
   height: 100%;
+}
+
+body {
+  background-color: var(--surface-page);
+  color: var(--ink-primary);
+  /* A desk tool: the page itself never scrolls, panes scroll inside it. */
+  overflow: hidden;
+}
+
+/* Scrollbars sized down so inner panes do not look like separate documents. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d6d3d1 transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: #d6d3d1;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: #a8a29e;
+}
+
+/* MapLibre's own controls, toned to match the surrounding chrome. */
+.maplibregl-ctrl-group {
+  border: 1px solid var(--border-hairline) !important;
+  box-shadow: none !important;
 }

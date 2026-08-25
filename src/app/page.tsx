@@ -1,11 +1,12 @@
+import { AppShell } from '@/components/app/AppShell';
+
+/**
+ * The whole app is one client-rendered screen.
+ *
+ * There is no server component work to do: the workbook is parsed in the
+ * browser, the boundaries are static assets, and nothing is fetched from an
+ * origin we control. Per CLAUDE.md, no data round-trips a server.
+ */
 export default function HomePage() {
-  return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-3 p-8">
-      <h1 className="text-2xl font-semibold tracking-tight">Naksha</h1>
-      <p className="text-sm text-slate-600">
-        Scaffold only. Types and constants are in place; the parser, resolver, and map
-        are not built yet.
-      </p>
-    </main>
-  );
+  return <AppShell />;
 }
