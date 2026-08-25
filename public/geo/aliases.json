@@ -30,6 +30,12 @@
       "note": "STATE-SCOPED, AND IT MUST BE. Raigarh is a real district in Chhattisgarh and Raigad is a real district in Maharashtra; they sit 1,100 km apart and differ by one letter. Unscoped, this alias silently relocates Chhattisgarh records to the west coast. The three Maharashtra rows spelled 'Raigarh' in the sample (Dighi Port, Dighi) are genuinely in Raigad."
     },
     {
+      "from": "lakhimpur",
+      "to": "Lakhimpur Kheri",
+      "state": "Uttar Pradesh",
+      "note": "STATE-SCOPED. Lakhimpur is ALSO a real district of Assam, which matches exactly at stage 1 there. Uttar Pradesh's district is officially 'Lakhimpur Kheri', and the shortened form scores only 0.60 against it - too low for the fuzzy stage, correctly. Without the scope this alias would be a second Raigarh."
+    },
+    {
       "from": "gurgoan",
       "to": "Gurugram",
       "note": "Misspelling of Gurgaon, which was itself renamed Gurugram in 2016."

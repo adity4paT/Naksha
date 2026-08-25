@@ -41,9 +41,10 @@ and vice versa.
   appear in the unmapped panel. That is correct behaviour, not a bug.
 - A district that was split will still be drawn at its *pre-split* extent, so
   its acreage is attributed to a larger polygon than reality.
-- One known gap in this source: **Shravasti (Uttar Pradesh) is absent**,
-  although it has existed since 1997. Records in Shravasti will not resolve at
-  district level.
+- Spellings drift between vintages. Shravasti (Uttar Pradesh) appears here as
+  **Shrawasti**, with a `w`. The resolver's fuzzy stage handles that one at
+  0.889 similarity and flags it for review; other such variants may need an
+  alias.
 
 **External borders are disputed and sources disagree.** This dataset draws
 Jammu and Kashmir and Ladakh as administered by India. Other sources — and
