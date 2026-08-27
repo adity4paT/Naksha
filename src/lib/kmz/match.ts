@@ -1,13 +1,28 @@
 /**
  * Binding uploaded files to sites.
  *
- * Three strategies, tried in order, each weaker than the last:
+ * Four strategies, tried in order, each weaker than the last:
  *
- *   1. FILENAME STEM. The file is called what the site is called. This is how
- *      surveyors actually name things, and it resolves the overwhelming
- *      majority of a bulk drop.
+ *   1. FILENAME STEM, EXACT. The file is called exactly what the site is
+ *      called. This is how surveyors actually name things, and it resolves the
+ *      overwhelming majority of a bulk drop.
  *
- *   2. THE SHEET COLUMN. The workbook has a "KMZ Files" column. In the current
+ *   2. FILENAME STEM, CONTAINS. The site's name appears as a whole phrase
+ *      somewhere inside the filename — added because real filenames commonly
+ *      prefix a district or taluka before the site name, e.g.
+ *      "Assandh, Karnal - Village Mardan Heri.kmz" for a site whose Site
+ *      column simply reads "Village Mardan Heri". A strict-equality strategy
+ *      sends every one of those to manual assignment even though the surveyor
+ *      unambiguously named the file after the site.
+ *
+ *      Still deterministic, not fuzzy: `containsWholeSite` requires the site's
+ *      full normalized name to appear with word boundaries on both sides, so
+ *      a short site name cannot match as a fragment inside an unrelated longer
+ *      word (a site named "An" cannot match inside "Anand"). And ambiguity is
+ *      handled exactly like tier 1 — if more than one site's name is found
+ *      inside the filename, none of them auto-bind; see below.
+ *
+ *   3. THE SHEET COLUMN. The workbook has a "KMZ Files" column. In the current
  *      sample it is entirely empty, and CLAUDE.md says not to build against it.
  *      So it is read as a HINT and nothing more: if it holds filenames, they are
  *      matched as filenames. It is never treated as a source of truth, and
@@ -15,15 +30,16 @@
  *      that no one reading the UI concludes the column is wired up when it is
  *      not.
  *
- *   3. MANUAL. Whatever is left. Not a failure mode — it is the designed
+ *   4. MANUAL. Whatever is left. Not a failure mode — it is the designed
  *      backstop, and the reason matching is allowed to be strict rather than
  *      clever. A wrong automatic binding puts the wrong boundary on the wrong
  *      parcel and looks correct; an unmatched file sits in a list until someone
  *      says where it goes.
  *
- * AMBIGUITY IS NEVER RESOLVED BY GUESSING. When a filename matches two sites,
- * both are recorded and the file goes to manual. Picking the first would be
- * indistinguishable from a correct match at a glance, and wrong half the time.
+ * AMBIGUITY IS NEVER RESOLVED BY GUESSING. When a filename matches two sites —
+ * at any tier — both are recorded and the file goes to manual. Picking the
+ * first would be indistinguishable from a correct match at a glance, and wrong
+ * half the time.
  */
 
 import type { NormalizedKey, ParsedRecord, SiteKey } from '@/types/schema';
@@ -32,7 +48,7 @@ import { normalizeForMatch } from './site-key';
 import type { SiteIndex, SiteIndexEntry } from './site-key';
 
 /** How a file came to be bound to a site. */
-export type KmzMatchStrategy = 'filename' | 'sheet-column' | 'manual';
+export type KmzMatchStrategy = 'filename' | 'filename-contains' | 'sheet-column' | 'manual';
 
 /** One file, and where matching thinks it belongs. */
 export interface KmzMatchProposal {
@@ -81,6 +97,27 @@ export interface KmzMatchResult {
 export function filenameStem(filename: string): string {
   const base = filename.split('/').pop() ?? filename;
   return base.replace(/\.(kmz|kml)$/i, '');
+}
+
+/** Characters `RegExp` would otherwise treat as syntax. */
+const escapeForRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Whether `needle` (a normalized site name) occurs inside `haystack` (a
+ * normalized filename stem) as a whole phrase, not as a fragment of a longer
+ * word.
+ *
+ * `\b` is the load-bearing part: it only breaks between a word character
+ * (letter, digit, underscore) and a non-word one, so "an" does not match
+ * inside "anand" — there is no boundary between the "n" and the following "a"
+ * — but does match "Karnal - An" as its own token. Because
+ * {@link normalizeForMatch} lowercases and collapses whitespace, `haystack`
+ * and `needle` are already directly comparable; nothing else needs to change
+ * before running the regex.
+ */
+export function containsWholeSite(haystack: string, needle: string): boolean {
+  if (needle === '') return false;
+  return new RegExp(`\\b${escapeForRegExp(needle)}\\b`).test(haystack);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -251,10 +288,38 @@ export function matchFilesToSites(
       };
     };
 
-    // Strategy 1, then 2. Order matters: the filename is what the surveyor
-    // controlled, the column is what someone typed into a spreadsheet later.
+    /**
+     * Tier 2: the site's name appears inside the filename, rather than being
+     * the whole of it. Built separately from `attempt` above because its
+     * candidates come from a substring test over every site, not a Map lookup
+     * on the exact normalized string.
+     */
+    const attemptContains = (): KmzMatchProposal | null => {
+      const hits = siteIndex.entries.filter((entry) =>
+        containsWholeSite(stem, normalizeForMatch(entry.label)),
+      );
+      if (hits.length === 0) return null;
+      if (hits.length > 1) {
+        return { filename, siteKey: null, strategy: null, siteLabel: null, ambiguousMatches: hits };
+      }
+      const entry = hits[0] as SiteIndexEntry;
+      return {
+        filename,
+        siteKey: entry.siteKey,
+        strategy: 'filename-contains',
+        siteLabel: entry.label,
+        ambiguousMatches: [],
+      };
+    };
+
+    // Strategies 1-3, in order. Exact filename beats a contains match beats
+    // the sheet-column hint: the filename is what the surveyor controlled,
+    // the column is what someone typed into a spreadsheet later, and "exact"
+    // beats "contains" because an exact match has no chance of ambiguity a
+    // contains match does not also have.
     return (
       attempt(byLabel.get(stem), 'filename') ??
+      attemptContains() ??
       (byHint === null ? null : attempt(byHint.get(stem), 'sheet-column')) ?? {
         filename,
         siteKey: null,

@@ -15,6 +15,7 @@
 
 import { useMemo } from 'react';
 
+import { LocationPinIcon } from '@/components/kmz';
 import type { BinnedScale, BinningMethod, ColorMode } from '@/lib/color';
 import { BINNING_METHOD_LABELS, BINNING_METHODS, NO_DATA, ZERO_VALUE } from '@/lib/color';
 
@@ -152,10 +153,12 @@ export function Legend({
           <ul className="flex flex-col gap-1.5">
             {surveyedCount > 0 && (
               <li className="flex items-start gap-2">
-                <span
-                  aria-hidden="true"
-                  className="mt-0.5 h-2.5 w-2.5 shrink-0 rotate-45 rounded-[2px] border border-white bg-emerald-600 shadow-sm"
-                />
+                {/*
+                  Same component the map marker renders — see LocationPinIcon's
+                  doc. A legend that drew a DIFFERENT shape here would promise
+                  something the map doesn't deliver.
+                */}
+                <LocationPinIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-600 drop-shadow-sm" />
                 <span className="flex-1 text-slate-700 dark:text-neutral-300">
                   <span className="tabular-nums">{surveyedCount}</span> surveyed —
                   exact boundary from an uploaded KMZ, shown at zoom 10 and above.

@@ -20,10 +20,17 @@
  *
  * ## Styled to be unmistakable
  *
- * A square, filled, accent-coloured pin — deliberately nothing like the round
- * white district count badge. The two carry incompatible claims ("somewhere in
- * this district" versus "here"), so the one thing the design must never do is
- * let them be confused for one another at a glance.
+ * A red map pin — deliberately nothing like the round white district count
+ * badge. The two carry incompatible claims ("somewhere in this district"
+ * versus "here"), so the one thing the design must never do is let them be
+ * confused for one another at a glance. The pin shape carries extra meaning a
+ * geometric marker wouldn't: its tip IS the coordinate, the same convention
+ * every map application uses — see {@link LocationPinIcon}.
+ *
+ * Positioned by its TIP, not its centre. A pin floats above the ground it
+ * marks; anchoring by the icon's bounding-box centre (as a symmetric shape
+ * like a circle or diamond safely can) would leave the point hovering above
+ * the actual coordinate instead of sitting on it.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -31,6 +38,7 @@ import type maplibregl from 'maplibre-gl';
 
 import { showKmz } from '@/lib/kmz';
 import { useKmzStore } from '@/store/kmz';
+import { LocationPinIcon } from './LocationPinIcon';
 import type { SurveyedSite } from './useSurveyedSites';
 
 export interface SurveyedSiteMarkersProps {
@@ -87,14 +95,25 @@ export function SurveyedSiteMarkers({ map, sites, visible }: SurveyedSiteMarkers
               aria-expanded={isOpen}
               aria-label={`${site.label} — surveyed boundary. Open actions.`}
               title={`${site.label} — surveyed position from ${site.filename}`}
-              className="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-[2px] border border-white bg-emerald-600 p-[5px] shadow-md transition hover:scale-125 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700"
-            />
+              // -translate-y-full, not -1/2: this is what puts the pin's tip
+              // exactly on the coordinate rather than the icon's centre. See
+              // the module doc. origin-bottom keeps the hover scale pivoting
+              // around that same tip, so growing the pin never detaches it
+              // from the point it marks.
+              className="pointer-events-auto absolute origin-bottom -translate-x-1/2 -translate-y-full text-red-600 drop-shadow-md transition hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-700 focus-visible:ring-offset-1"
+            >
+              <LocationPinIcon className="h-7 w-7" />
+            </button>
 
             {isOpen && (
               <div
                 role="dialog"
                 aria-label={`Actions for ${site.label}`}
-                className="pointer-events-auto absolute -translate-x-1/2 -translate-y-full -top-3 z-30 w-52 rounded border border-stone-300 bg-white p-2 shadow-lg"
+                // -top-9 clears the full height of the pin above the point
+                // (the marker itself renders up to 28px above the coordinate,
+                // per -translate-y-full above) plus a small gap, so the popup
+                // never overlaps the icon it belongs to.
+                className="pointer-events-auto absolute -top-9 -translate-x-1/2 -translate-y-full z-30 w-52 rounded border border-stone-300 bg-white p-2 shadow-lg"
               >
                 <p className="truncate text-[11px] font-semibold text-stone-900" title={site.label}>
                   {site.label}

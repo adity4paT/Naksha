@@ -38,6 +38,12 @@ interface StagedFile {
 
 const STRATEGY_LABEL: Record<KmzMatchStrategy, string> = {
   filename: 'by filename',
+  // Deliberately distinguished from the exact match above. A contains match
+  // is still auto-bound, but it is a weaker claim — the filename carries the
+  // site's name plus something else the sheet didn't say — and the label
+  // should let a reviewer spot which rows in the matched list are worth a
+  // second look, without having to distrust the whole list.
+  'filename-contains': 'by filename (partial)',
   'sheet-column': 'by sheet column',
   manual: 'assigned by you',
 };

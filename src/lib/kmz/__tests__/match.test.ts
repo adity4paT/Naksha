@@ -206,3 +206,81 @@ describe('the KMZ Files column', () => {
     expect(result.matched[0]?.siteKey).toBe(makeSiteKey('Gujarat', 'Kutch', 'Riverside'));
   });
 });
+
+describe('containsWholeSite matching (tier 2)', () => {
+  it('binds the exact real-world case that motivated this tier', () => {
+    const records = [
+      record(2, { state: 'Haryana', district: 'Karnal', site: 'Village Mardan Heri' }),
+    ];
+    const index = indexSites(records, COLUMNS);
+
+    const result = matchFilesToSites(['Assandh, Karnal - Village Mardan Heri.kmz'], {
+      records,
+      siteIndex: index,
+      columnKeys: COLUMN_KEYS,
+    });
+
+    expect(result.matched).toHaveLength(1);
+    expect(result.matched[0]?.strategy).toBe('filename-contains');
+    expect(result.matched[0]?.siteKey).toBe(
+      makeSiteKey('Haryana', 'Karnal', 'Village Mardan Heri'),
+    );
+  });
+
+  it('still prefers an exact match over a contains match when both are available', () => {
+    const records = [
+      record(2, { state: 'Gujarat', district: 'Kutch', site: 'Riverside' }),
+      record(3, { state: 'Gujarat', district: 'Kutch', site: 'New Riverside Extension' }),
+    ];
+    const index = indexSites(records, COLUMNS);
+
+    // "Riverside" is exactly one site's name, and also a substring of another.
+    // Tier 1 must win outright — tier 2 is never even consulted here.
+    const result = matchFilesToSites(['Riverside.kmz'], {
+      records,
+      siteIndex: index,
+      columnKeys: COLUMN_KEYS,
+    });
+
+    expect(result.matched[0]?.strategy).toBe('filename');
+    expect(result.matched[0]?.siteKey).toBe(makeSiteKey('Gujarat', 'Kutch', 'Riverside'));
+  });
+
+  it('does not match a short site name as a fragment of a longer word', () => {
+    const records = [
+      record(2, { state: 'Gujarat', district: 'Anand', site: 'An' }),
+    ];
+    const index = indexSites(records, COLUMNS);
+
+    // "an" is a substring of "anand", but not a whole-word occurrence — a
+    // naive .includes() would wrongly bind this; \b must refuse it.
+    const result = matchFilesToSites(['Anand Survey Block.kmz'], {
+      records,
+      siteIndex: index,
+      columnKeys: COLUMN_KEYS,
+    });
+
+    expect(result.matched).toHaveLength(0);
+    expect(result.unmatched).toHaveLength(1);
+  });
+
+  it('still refuses to guess when two sites are both found inside the filename', () => {
+    const records = [
+      record(2, { state: 'Punjab', district: 'Ludhiana', site: 'North Block' }),
+      record(3, { state: 'Punjab', district: 'Ludhiana', site: 'South Block' }),
+    ];
+    const index = indexSites(records, COLUMNS);
+
+    // Deliberately contrived so both names could plausibly appear, proving
+    // ambiguity at tier 2 is handled the same way as ambiguity at tier 1:
+    // neither auto-binds, and both are reported.
+    const result = matchFilesToSites(['North Block and South Block, survey.kmz'], {
+      records,
+      siteIndex: index,
+      columnKeys: COLUMN_KEYS,
+    });
+
+    expect(result.matched).toHaveLength(0);
+    expect(result.unmatched[0]?.ambiguousMatches).toHaveLength(2);
+  });
+});

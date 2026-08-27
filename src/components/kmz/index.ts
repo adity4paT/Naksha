@@ -1,6 +1,9 @@
 /** Public entry point for KMZ attachment UI. */
 
 export { EarthProHint, KmzSiteActions } from './KmzSiteActions';
+
+export { LocationPinIcon } from './LocationPinIcon';
+export type { LocationPinIconProps } from './LocationPinIcon';
 export type { KmzSiteActionsProps } from './KmzSiteActions';
 
 export { KmzBulkPanel } from './KmzBulkPanel';

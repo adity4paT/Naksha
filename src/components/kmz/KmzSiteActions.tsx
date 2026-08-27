@@ -14,10 +14,33 @@
  *
  * ## Two ways out, ranked honestly
  *
- * Show KMZ downloads the real boundary and opens it in Google Earth Pro. Earth
- * Web shows only a camera position — no parcel outline, nothing surveyed. They
- * are not alternatives, so they are not styled as a pair: Show is primary,
- * Earth Web is a small secondary link that says "location" in its own label.
+ * Show KMZ downloads the real boundary, which then opens in Google Earth Pro —
+ * usually with one extra click. Earth Web shows only a camera position — no
+ * parcel outline, nothing surveyed. They are not alternatives, so they are not
+ * styled as a pair: Show is primary, Earth Web is a small secondary link that
+ * says "location" in its own label.
+ *
+ * ## "Downloads, then opens" — not "opens"
+ *
+ * A page cannot make the OS launch a desktop application on its own; that is a
+ * deliberate browser sandbox boundary, not a gap in this code. `showKmz` (see
+ * download.ts) does the only thing a page is allowed to do: save the bytes with
+ * the KMZ media type and a `.kmz` name. What happens next depends on the
+ * browser's OWN download UI, not on anything this app controls:
+ *
+ *   - Chrome/Edge show a small chip at the bottom of the window after every
+ *     download; clicking the file name there launches the registered app.
+ *     Right-clicking it offers "Always open files of this type", after which
+ *     every future Show KMZ opens Earth Pro with no further click.
+ *   - Firefox asks what to do with a KMZ the first time (Settings → General →
+ *     Applications lets it be set to "Open in Google Earth Pro" permanently).
+ *   - Either way, the file always lands in the Downloads folder too, so
+ *     double-clicking it there works regardless of what the browser chip did.
+ *
+ * Every string in this file that mentions Earth Pro is written to reflect
+ * that — "opens" without a qualifier over-promises something no web page can
+ * deliver, and a user who takes it literally goes looking for a bug that
+ * is not here when the real next step is one click in their downloads.
  */
 
 import { useCallback, useRef, useState } from 'react';
@@ -146,7 +169,7 @@ export function KmzSiteActions({ siteKey, siteLabel, compact = false }: KmzSiteA
               onClick={() => void handleShow()}
               className="rounded bg-stone-900 px-2 py-0.5 text-[11px] font-medium text-white transition-colors hover:bg-stone-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-500"
               aria-label={`Show KMZ boundary for ${siteLabel}. Downloads the original file.`}
-              title="Downloads the original file, unmodified. Opens in Google Earth Pro."
+              title="Downloads the original file, unmodified. Open it from your downloads (or click the download notification) to view it in Google Earth Pro."
             >
               Show KMZ
             </button>
@@ -253,9 +276,13 @@ export function KmzSiteActions({ siteKey, siteLabel, compact = false }: KmzSiteA
 /**
  * The one-time hint, rendered once at app level rather than per row.
  *
- * A user without Google Earth Pro otherwise gets a downloaded file their OS
- * cannot open and no explanation — the download silently succeeds and nothing
- * happens, which reads as the app being broken.
+ * Two things it has to teach in one line, because a user only reads it once:
+ * that Show KMZ downloads rather than opens (a page cannot launch a desktop
+ * app on its own — see the module doc), and the one click that turns it into
+ * "opens" from then on. Skip either half and a user without Earth Pro reads a
+ * silently-downloaded file as the app being broken, while a user WITH it never
+ * discovers the one-time setting that would have saved them a click on every
+ * future boundary they open.
  */
 export function EarthProHint() {
   const visible = useKmzStore((state) => state.earthProHintVisible);
@@ -266,9 +293,11 @@ export function EarthProHint() {
   return (
     <div className="flex items-start justify-between gap-3 border-b border-sky-200 bg-sky-50 px-4 py-2 text-[11px] text-sky-900">
       <p>
-        KMZ files open in <strong>Google Earth Pro</strong>, which renders the surveyed
-        boundary. If nothing happened when the file downloaded, Earth Pro is probably not
-        installed —{' '}
+        <strong>Show KMZ</strong> downloads the boundary — it does not open automatically.
+        Click the download notification (or the file in your Downloads folder) to view it in{' '}
+        <strong>Google Earth Pro</strong>. Choosing &ldquo;Always open files of this
+        type&rdquo; there makes every future one open with no extra click. Nothing happening
+        at all usually means Earth Pro is not installed —{' '}
         <a
           href={EARTH_PRO_URL}
           target="_blank"

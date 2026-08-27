@@ -8,11 +8,16 @@
  * mojibake in a new tab — and would strip the filename, which is the part that
  * makes the file openable.
  *
- * The MIME type is what makes the rest work. Google Earth Pro registers itself
- * for application/vnd.google-earth.kmz on install, so a correctly typed blob
- * with a .kmz filename opens in Earth Pro with the parcel drawn. Serving the
- * same bytes as application/octet-stream gets a file the OS will not associate
- * with anything.
+ * The MIME type is what makes the rest work, but "work" stops at the download.
+ * Google Earth Pro registers itself for application/vnd.google-earth.kmz on
+ * install, so a correctly typed blob with a .kmz filename CAN open in Earth
+ * Pro with the parcel drawn — but a web page cannot make that happen by
+ * itself. Launching a desktop application on download completion is a
+ * decision the browser's own download UI makes, never a script: Chrome/Edge
+ * show a chip after each download that opens the file on a click (and can be
+ * set to always do so for this type); Firefox can be configured the same way
+ * per MIME type. Serving the bytes as application/octet-stream instead would
+ * remove even that path — the OS would have no association to offer at all.
  */
 
 import { kmzStore } from './store';
