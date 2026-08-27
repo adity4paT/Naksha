@@ -17,6 +17,9 @@
 
 import { useMemo, useState } from 'react';
 
+import { KmzUploadButton } from '@/components/kmz';
+import { siteKeyForRecord, siteLabelForRecord } from '@/lib/kmz';
+import type { SiteKeyColumns } from '@/lib/kmz';
 import { formatMeasureValue } from '@/lib/measures';
 import type { MeasureDescriptor } from '@/lib/measures';
 import type { CellValue, ColumnDescriptor, ParsedRecord } from '@/types/schema';
@@ -28,6 +31,8 @@ export interface DataTableProps {
   readonly measure: MeasureDescriptor | null;
   /** Total in the dataset, for the "of N" line. */
   readonly totalRecords: number;
+  /** State/district/site columns, for deriving each row's attachment key. */
+  readonly siteColumns: SiteKeyColumns;
 }
 
 const PAGE_SIZE = 50;
@@ -54,7 +59,13 @@ function compare(a: CellValue, b: CellValue): number {
   return String(a).localeCompare(String(b));
 }
 
-export function DataTable({ records, columns, measure, totalRecords }: DataTableProps) {
+export function DataTable({
+  records,
+  columns,
+  measure,
+  totalRecords,
+  siteColumns,
+}: DataTableProps) {
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [direction, setDirection] = useState<SortDirection>('asc');
   const [page, setPage] = useState(0);
@@ -141,6 +152,12 @@ export function DataTable({ records, columns, measure, totalRecords }: DataTable
                   </th>
                 );
               })}
+              <th
+                scope="col"
+                className="whitespace-nowrap border-b border-stone-200 px-2 py-1.5 font-medium text-stone-600"
+              >
+                Boundary
+              </th>
             </tr>
           </thead>
 
@@ -170,6 +187,13 @@ export function DataTable({ records, columns, measure, totalRecords }: DataTable
                     </td>
                   );
                 })}
+                <td className="whitespace-nowrap border-b border-stone-100 px-2 py-1">
+                  <KmzUploadButton
+                    siteKey={siteKeyForRecord(record, siteColumns)}
+                    siteLabel={siteLabelForRecord(record, siteColumns)}
+                    compact
+                  />
+                </td>
               </tr>
             ))}
           </tbody>

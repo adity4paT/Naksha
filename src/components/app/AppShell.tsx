@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { FilterPanel, useUrlSync } from '@/components/filters';
+import { KmzBulkPanel } from '@/components/kmz';
 import { MapDashboard } from '@/components/map';
 import { UploadFlow } from '@/components/upload';
 import { DataTable } from '@/components/views/DataTable';
@@ -24,6 +25,7 @@ import type { AliasMap, BoundaryIndex } from '@/lib/geo';
 import { loadAliasMap, loadBoundaryIndex } from '@/lib/geo';
 import { useDatasetStore } from '@/store/dataset';
 import { focusedState, useFilterStore } from '@/store/filters';
+import { useKmzStore } from '@/store/kmz';
 import {
   AllUnmappedState,
   BoundariesFailedState,
@@ -44,6 +46,7 @@ type Tab = 'chart' | 'table';
 export function AppShell() {
   const [boundaries, setBoundaries] = useState<BoundaryLoad>({ status: 'loading' });
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [kmzOpen, setKmzOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('chart');
   const [viewsOpen, setViewsOpen] = useState(true);
   const [filtersOpen, setFiltersOpen] = useState(true);
@@ -70,6 +73,15 @@ export function AppShell() {
   const unmappedOpen = useFilterStore((s) => s.unmappedPanelOpen);
 
   const derived = useDerivedData('light');
+
+  /* ---- attachments, read once on mount ---------------------------------- */
+  const refreshKmz = useKmzStore((s) => s.refresh);
+  useEffect(() => {
+    // IndexedDB outlives the workbook, so attachments are read at startup
+    // rather than on commit. A browser with no IndexedDB simply reports an
+    // error into the store and every upload control stays inert.
+    void refreshKmz();
+  }, [refreshKmz]);
 
   /* ---- boundaries, loaded once ----------------------------------------- */
   useEffect(() => {
@@ -248,6 +260,16 @@ export function AppShell() {
           {workbook !== null && (
             <button
               type="button"
+              onClick={() => setKmzOpen((open) => !open)}
+              className="rounded border border-stone-300 px-2.5 py-1 text-[11px] font-medium text-stone-700 hover:bg-stone-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-600"
+            >
+              Attach KMZ
+            </button>
+          )}
+
+          {workbook !== null && (
+            <button
+              type="button"
               onClick={() => {
                 clearDataset();
                 resetFilters();
@@ -277,6 +299,20 @@ export function AppShell() {
                 unmatched, so the upload waits for them.
               </p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ---- KMZ attachment drawer ---- */}
+      {kmzOpen && workbook !== null && (
+        <div className="shrink-0 border-b border-stone-200 bg-stone-100 p-4">
+          <div className="mx-auto max-w-5xl rounded border border-stone-200">
+            <KmzBulkPanel
+              records={workbook.records}
+              columnKeys={workbook.columns.map((column) => column.normalizedKey)}
+              binding={binding}
+              onClose={() => setKmzOpen(false)}
+            />
           </div>
         </div>
       )}
@@ -422,6 +458,7 @@ export function AppShell() {
                     columns={workbook.columns}
                     measure={derived.measure}
                     totalRecords={workbook.records.length}
+                    siteColumns={binding}
                   />
                 )}
               </div>
@@ -436,6 +473,7 @@ export function AppShell() {
               records={siteRecords}
               siteKey={binding.siteKey}
               areaKey={binding.areaKey}
+              siteColumns={binding}
               measure={derived.measure}
               onClose={() => openSiteList(null)}
             />

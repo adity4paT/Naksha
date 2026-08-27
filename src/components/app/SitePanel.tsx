@@ -11,6 +11,9 @@
 
 import { useMemo } from 'react';
 
+import { KmzUploadButton } from '@/components/kmz';
+import { siteKeyForRecord } from '@/lib/kmz';
+import type { SiteKeyColumns } from '@/lib/kmz';
 import { formatMeasureValue } from '@/lib/measures';
 import type { MeasureDescriptor } from '@/lib/measures';
 import { recordValue } from '@/lib/measures';
@@ -21,6 +24,13 @@ export interface SitePanelProps {
   readonly records: readonly ParsedRecord[];
   readonly siteKey: NormalizedKey | null;
   readonly areaKey: NormalizedKey | null;
+  /**
+   * State/district/site columns, for deriving the durable attachment key.
+   *
+   * Distinct from siteKey above, which names the column holding site names.
+   * This one identifies the row's subject. See the SiteKey doc in schema.ts.
+   */
+  readonly siteColumns: SiteKeyColumns;
   readonly measure: MeasureDescriptor | null;
   readonly onClose: () => void;
 }
@@ -30,6 +40,7 @@ export function SitePanel({
   records,
   siteKey,
   areaKey,
+  siteColumns,
   measure,
   onClose,
 }: SitePanelProps) {
@@ -45,9 +56,10 @@ export function SitePanel({
               : ((record.values[siteKey] as string | null) ?? `Row ${record.sourceRowNumber}`),
           acres: areaKey === null ? null : (record.values[areaKey] as number | null),
           value: measure === null ? null : recordValue(measure, record.values),
+          attachmentKey: siteKeyForRecord(record, siteColumns),
         }))
         .sort((a, b) => (b.acres ?? 0) - (a.acres ?? 0)),
-    [records, siteKey, areaKey, measure],
+    [records, siteKey, areaKey, siteColumns, measure],
   );
 
   const totalAcres = rows.reduce((sum, row) => sum + (row.acres ?? 0), 0);
@@ -98,6 +110,9 @@ export function SitePanel({
                     : '—'}
               </span>
             </p>
+            <div className="mt-1">
+              <KmzUploadButton siteKey={row.attachmentKey} siteLabel={row.name} />
+            </div>
           </li>
         ))}
       </ul>

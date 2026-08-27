@@ -70,21 +70,58 @@ export interface LatLng {
  */
 export type KmzParseStatus = 'unparsed' | 'parsed' | 'unparseable';
 
-/** What phase one may construct. Accept {@link KmzParseStatus}; return this. */
+/**
+ * A record that has been stored but not opened.
+ *
+ * No longer the only status a producer may emit — parsing landed on 2026-08-27
+ * and src/lib/kmz/parse.ts returns {@link ParsedKmzStatus}. This alias survives
+ * because the state it names is still real: a bundle exported before parsing
+ * existed restores entries with no centroid, and they must round-trip rather
+ * than be silently promoted to 'parsed'.
+ */
 export type UnparsedKmzStatus = Extract<KmzParseStatus, 'unparsed'>;
+
+/**
+ * What the parser may return.
+ *
+ * Never 'unparsed', which means "not yet opened" and is a statement about the
+ * store rather than about a file. A parser that returned it would be reporting
+ * that it had not run.
+ */
+export type ParsedKmzStatus = Exclude<KmzParseStatus, 'unparsed'>;
 
 /** Why an attachment could not be fully read. */
 export type KmzWarningCode =
-  /** Not a zip container at all. */
+  /** Not a zip container at all. Read as plain KML instead. */
   | 'not-a-zip'
-  /** Zip opened, but contains no .kml member. */
+  /** Zip opened, but holds no .kml at its root. */
   | 'no-kml-entry'
-  /** More than one .kml member; the first was used. */
+  /** More than one root-level .kml; the first was used, per the KMZ spec. */
   | 'multiple-kml-entries'
-  /** KML parsed, but held no polygon — points or paths only. */
-  | 'no-polygon'
-  /** Coordinates outside plausible bounds for India. */
+  /**
+   * No Placemark carried geometry.
+   *
+   * Widened from 'no-polygon' when parsing landed on 2026-08-27. The validity
+   * rule is "at least one Placemark with geometry", so a file of points or
+   * paths is valid and yields a representative point like any other. Only a
+   * file with no geometry at all fails, which is why the code no longer names
+   * polygons specifically.
+   */
+  | 'no-placemark-geometry'
+  /**
+   * Coordinates outside plausible bounds for India.
+   *
+   * Usually a lat/lng transposition rather than a foreign file, since KML
+   * stores longitude first. The parser distinguishes the two and says which.
+   */
   | 'coordinates-out-of-range'
+  /**
+   * A NetworkLink is present.
+   *
+   * Reported, never followed. Fetching it would issue a request to a
+   * third-party server from a page holding confidential land data.
+   */
+  | 'network-link'
   /** Anything else, with detail in the message. */
   | 'unreadable';
 
@@ -160,6 +197,20 @@ export interface KmzAttachment {
  * render a list would pull all 130 Blobs into memory to display filenames.
  */
 export type KmzAttachmentMeta = Omit<KmzAttachment, 'bytes'>;
+
+/**
+ * What the store persists out of a parse.
+ *
+ * Declared here rather than imported from ./parse.ts so the storage contract
+ * does not depend on the parser. The store's job is to keep whatever verdict it
+ * is handed next to the bytes; it has no opinion on how that verdict was
+ * reached, and a future parser rewrite should not ripple into this interface.
+ */
+export interface KmzParseOutcome {
+  readonly centroid: LatLng | null;
+  readonly parseStatus: KmzParseStatus;
+  readonly parseWarnings: readonly KmzWarning[];
+}
 
 /* -------------------------------------------------------------------------- */
 /* Storage usage                                                               */
@@ -310,8 +361,19 @@ export const KMZ_STORE_NAME = 'attachments';
  * without standing up a fake IndexedDB.
  */
 export interface KmzStore {
-  /** Store a file against a site, replacing any existing attachment. */
-  put(siteKey: SiteKey, file: File): Promise<KmzAttachmentMeta>;
+  /**
+   * Store a file against a site, replacing any existing attachment.
+   *
+   * outcome carries what the parser derived. Omit it to store the bytes without
+   * opening them, which lands the record as 'unparsed' — the state a bulk
+   * import uses when it defers parsing, and the reason that status still exists.
+   */
+  put(
+    siteKey: SiteKey,
+    bytes: Blob,
+    filename: string,
+    outcome?: KmzParseOutcome,
+  ): Promise<KmzAttachmentMeta>;
 
   /** Full record including bytes. Null when the site has no attachment. */
   get(siteKey: SiteKey): Promise<KmzAttachment | null>;
@@ -341,7 +403,19 @@ export interface KmzStore {
   /** Zip of every attachment plus manifest.json. */
   exportBundle(): Promise<Blob>;
 
-  importBundle(bundle: Blob, policy: KmzImportConflictPolicy): Promise<KmzImportReport>;
+  /**
+   * Restore a bundle.
+   *
+   * knownSiteKeys is the set of sites the loaded workbook contains, used only
+   * to populate {@link KmzImportReport.orphanedSiteKeys}. Omit it and nothing is
+   * reported as orphaned: the store cannot know which sites exist, and guessing
+   * would be worse than declining to answer.
+   */
+  importBundle(
+    bundle: Blob,
+    policy: KmzImportConflictPolicy,
+    knownSiteKeys?: ReadonlySet<SiteKey>,
+  ): Promise<KmzImportReport>;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -352,9 +426,18 @@ export interface KmzStore {
  * The same tripwire idiom as src/types/schema.ts, for the same reason: a seam is
  * only real if something fails the build when it silently closes.
  *
- * _PhaseOneStatusIsUnparsedOnly fails if someone widens what this phase may
- * construct without deciding to. _ParsedArmExists fails if the union is
- * collapsed back to a single member, which would delete the seam outright.
+ * _ParserProducesTerminalStatus replaced _PhaseOneStatusIsUnparsedOnly on
+ * 2026-08-27, when parsing landed. The original guard asserted that the only
+ * constructible status was 'unparsed', which was true while nothing opened a
+ * file. It is now false, and worth noting that it would NOT have failed the
+ * build on its own: it constrained the alias rather than the producer, so
+ * widening what the parser emits left it quietly passing. Weak guards read
+ * exactly like strong ones in a diff. Its replacement pins the parser's actual
+ * range, so collapsing 'unparseable' into 'parsed' — the plausible edit that
+ * would turn every broken file into a silently valid one — fails to compile.
+ *
+ * _ParsedArmExists fails if the union is collapsed back to a single member,
+ * which would delete the seam outright.
  *
  * _AttachmentIsNotKeyedByRecordId is the one worth reading twice. It fails if
  * siteKey is ever retyped to {@link RecordId} — the positional key — an easy and
@@ -368,7 +451,9 @@ type Equals<A, B> = (<G>() => G extends A ? 1 : 2) extends <G>() => G extends B 
   ? true
   : false;
 
-export type _PhaseOneStatusIsUnparsedOnly = Assert<Equals<UnparsedKmzStatus, 'unparsed'>>;
+export type _ParserProducesTerminalStatus = Assert<
+  Equals<ParsedKmzStatus, 'parsed' | 'unparseable'>
+>;
 export type _ParsedArmExists = Assert<Equals<Extract<KmzParseStatus, 'parsed'>, 'parsed'>>;
 export type _AttachmentIsNotKeyedByRecordId = Assert<
   Equals<Equals<KmzAttachment['siteKey'], RecordId>, false>
