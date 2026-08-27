@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build:geo": "node scripts/build-geo.mjs"
+    "build:geo": "node scripts/build-geo.mjs",
+    "build:kmz-fixtures": "node scripts/build-kmz-fixtures.mjs"
   },
   "dependencies": {
     "@tmcw/togeojson": "^7.1.2",

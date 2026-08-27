@@ -29,6 +29,8 @@
  * bundle export exists precisely because the data cannot travel any other way.
  */
 
+import type { Geometry } from 'geojson';
+
 import type { RecordId, SiteKey, SurveyedLocation } from '@/types/schema';
 
 /* -------------------------------------------------------------------------- */
@@ -178,6 +180,19 @@ export interface KmzAttachment {
   readonly parseWarnings: readonly KmzWarning[];
 
   /**
+   * Cached boundary geometry, or null when the file was never parsed.
+   *
+   * Derived from {@link KmzAttachment.bytes} and stored beside them purely for
+   * render speed. If the two ever disagree the bytes win: re-uploading the file
+   * refreshes this, and nothing reconstructs a download from it.
+   *
+   * Optional on the type because records written before this field existed
+   * (DB version 1) are still readable. They render as a marker with no outline
+   * until the file is uploaded again.
+   */
+  readonly geometry?: Geometry | null;
+
+  /**
    * SHA-256 of bytes, lowercase hex.
    *
    * NOT in the original spec — flagged for a keep-or-drop call. It earns its
@@ -210,6 +225,11 @@ export interface KmzParseOutcome {
   readonly centroid: LatLng | null;
   readonly parseStatus: KmzParseStatus;
   readonly parseWarnings: readonly KmzWarning[];
+  /**
+   * Boundary geometry, cached so the map can draw outlines without re-opening
+   * every archive. Derived — the bytes remain the record of truth.
+   */
+  readonly geometry: Geometry | null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -253,7 +273,7 @@ export interface KmzStorageUsage {
  * The importer must refuse a version it does not recognise rather than guess at
  * the fields, so an older build cannot half-read a newer bundle.
  */
-export const KMZ_BUNDLE_FORMAT_VERSION = 1;
+export const KMZ_BUNDLE_FORMAT_VERSION = 2;
 
 /** One entry in the bundle manifest. */
 export interface KmzBundleEntry {
@@ -268,6 +288,11 @@ export interface KmzBundleEntry {
   readonly centroid: LatLng | null;
   readonly parseStatus: KmzParseStatus;
   readonly parseWarnings: readonly KmzWarning[];
+  /**
+   * Cached geometry, carried so a restored bundle can draw outlines without
+   * the importer needing a parser. Absent in version 1 bundles.
+   */
+  readonly geometry?: Geometry | null;
 }
 
 /**
@@ -349,7 +374,7 @@ export interface KmzImportReport {
 /** IndexedDB database name. Origin-scoped; nothing else writes to it. */
 export const KMZ_DB_NAME = 'naksha-kmz';
 /** Bump only alongside an onupgradeneeded migration. */
-export const KMZ_DB_VERSION = 1;
+export const KMZ_DB_VERSION = 2;
 /** Object store, keyed by {@link SiteKey}. */
 export const KMZ_STORE_NAME = 'attachments';
 

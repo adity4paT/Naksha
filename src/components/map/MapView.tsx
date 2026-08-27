@@ -29,6 +29,8 @@ import type { AggregationResult, RegionAggregate } from '@/lib/aggregate';
 import type { BinnedScale, ColorMode } from '@/lib/color';
 import { binIndexOf, CHROME, NO_DATA } from '@/lib/color';
 import type { BoundaryIndex } from '@/lib/geo';
+import { SurveyedSiteMarkers } from '@/components/kmz';
+import type { SurveyedSite } from '@/components/kmz';
 import { LAYER_IDS, SOURCES, buildLayers } from './layers';
 import type { LayerBuildContext } from './layers';
 import { RegionKeyboardList, RegionTooltip } from './RegionTooltip';
@@ -57,6 +59,8 @@ export interface MapViewProps {
   readonly onSelectDistrict: (name: string) => void;
   readonly onZoomChange: (zoom: number) => void;
   readonly onOpenSiteList: (name: string) => void;
+  /** Sites with a parsed KMZ. Only these have a real position to plot. */
+  readonly surveyedSites: readonly SurveyedSite[];
 }
 
 export function MapView({
@@ -74,6 +78,7 @@ export function MapView({
   onSelectDistrict,
   onZoomChange,
   onOpenSiteList,
+  surveyedSites,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -169,7 +174,12 @@ export function MapView({
       // derived floor can land on top of the initial zoom, so scrolling out
       // does nothing and the map feels broken.
       minZoom: 3,
-      maxZoom: 10,
+      // Raised from 10 when surveyed boundaries landed. A parcel outline
+      // appears at zoom 10 (zoom 10), so a ceiling of 10 made
+      // it reachable only at the very last notch of the zoom range — visible in
+      // principle, useless in practice for looking at a parcel a few hundred
+      // metres across. 16 is close enough to read one boundary against another.
+      maxZoom: 16,
 
       // The data is Indian administrative boundaries; there is nothing to see
       // outside these bounds. Padded well beyond the coastline so panning at
@@ -228,7 +238,37 @@ export function MapView({
 
     upsert(SOURCES.states, collections.states as GeoJSON.FeatureCollection);
     upsert(SOURCES.districts, collections.districts as GeoJSON.FeatureCollection);
+    // Registered empty so the outline layer always has a source to attach to.
+    // Its data arrives in the effect below, which can fire before or after the
+    // first attachment is stored.
+    upsert(SOURCES.surveyed, { type: 'FeatureCollection', features: [] });
   }, [ready, collections]);
+
+  /**
+   * Surveyed boundary geometry.
+   *
+   * Sites whose cached geometry is missing — records written before it was
+   * stored — are simply absent from this collection. They still get a marker
+   * from their centroid; they just have no outline until the file is uploaded
+   * again.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map === null || !ready) return;
+    const source = map.getSource(SOURCES.surveyed) as GeoJSONSource | undefined;
+    if (source === undefined) return;
+
+    source.setData({
+      type: 'FeatureCollection',
+      features: surveyedSites
+        .filter((site) => site.geometry !== null)
+        .map((site) => ({
+          type: 'Feature' as const,
+          geometry: site.geometry as GeoJSON.Geometry,
+          properties: { siteKey: site.siteKey, label: site.label },
+        })),
+    });
+  }, [ready, surveyedSites]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -481,6 +521,14 @@ export function MapView({
         selectedState={selectedState}
         onOpenSiteList={onOpenSiteList}
       />
+
+      {/*
+        Drawn over the district badges (z-20 against z-10). Where both land on
+        the same pixel the precise thing should win — a badge means "somewhere
+        in this district" and a marker means "here", and the marker is the
+        stronger claim.
+      */}
+      <SurveyedSiteMarkers map={mapInstance} sites={surveyedSites} visible />
 
       <RegionTooltip
         datum={tooltip}

@@ -11,7 +11,7 @@
 
 import { useMemo } from 'react';
 
-import { KmzUploadButton } from '@/components/kmz';
+import { KmzSiteActions } from '@/components/kmz';
 import { siteKeyForRecord } from '@/lib/kmz';
 import type { SiteKeyColumns } from '@/lib/kmz';
 import { formatMeasureValue } from '@/lib/measures';
@@ -111,7 +111,7 @@ export function SitePanel({
               </span>
             </p>
             <div className="mt-1">
-              <KmzUploadButton siteKey={row.attachmentKey} siteLabel={row.name} />
+              <KmzSiteActions siteKey={row.attachmentKey} siteLabel={row.name} />
             </div>
           </li>
         ))}

@@ -14,7 +14,12 @@
 
 import { create } from 'zustand';
 
-import { kmzStore, parseKmz } from '@/lib/kmz';
+import {
+  dismissEarthProHint as persistHintDismissal,
+  earthProHintDismissed,
+  kmzStore,
+  parseKmz,
+} from '@/lib/kmz';
 import type { KmzAttachmentMeta, KmzStorageUsage } from '@/lib/kmz';
 import type { SiteKey } from '@/types/schema';
 
@@ -37,6 +42,17 @@ export interface KmzState {
   readonly loading: boolean;
   readonly error: string | null;
 
+  /**
+   * Whether to show the "opens in Google Earth Pro" hint.
+   *
+   * Raised the first time a boundary is actually handed to the browser, not on
+   * page load: before anyone has downloaded anything the hint is noise, and
+   * after a download that appears to do nothing it is the explanation.
+   */
+  readonly earthProHintVisible: boolean;
+  noteKmzShown: () => void;
+  dismissEarthProHint: () => void;
+
   refresh: () => Promise<void>;
   upload: (
     siteKey: SiteKey,
@@ -56,6 +72,17 @@ export const useKmzStore = create<KmzState>((set, get) => ({
   usage: null,
   loading: false,
   error: null,
+  earthProHintVisible: false,
+
+  noteKmzShown() {
+    if (earthProHintDismissed()) return;
+    set({ earthProHintVisible: true });
+  },
+
+  dismissEarthProHint() {
+    persistHintDismissal();
+    set({ earthProHintVisible: false });
+  },
 
   async refresh() {
     set({ loading: true, error: null });
@@ -82,6 +109,7 @@ export const useKmzStore = create<KmzState>((set, get) => ({
         centroid: parsed.centroid,
         parseStatus: parsed.status,
         parseWarnings: parsed.warnings,
+        geometry: parsed.geometry,
       });
 
       set({

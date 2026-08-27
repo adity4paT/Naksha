@@ -84,6 +84,12 @@ function openDb(): Promise<IDBDatabase> {
         // same site replaces the first rather than accumulating.
         db.createObjectStore(KMZ_STORE_NAME, { keyPath: 'siteKey' });
       }
+      // v1 -> v2 added the cached `geometry` field. No migration runs: the
+      // field is optional, records written under v1 simply have none, and they
+      // draw a marker without an outline until the file is uploaded again. The
+      // alternative — re-parsing every stored archive inside an upgrade
+      // transaction — would block the open on work that can fail, to rebuild a
+      // cache the bytes can always regenerate.
     };
 
     request.onsuccess = () => resolve(request.result);
@@ -175,6 +181,7 @@ const UNPARSED: KmzParseOutcome = {
   centroid: null,
   parseStatus: 'unparsed',
   parseWarnings: [],
+  geometry: null,
 };
 
 /* -------------------------------------------------------------------------- */
@@ -216,6 +223,7 @@ export const kmzStore: KmzStore = {
       centroid: outcome.centroid,
       parseStatus: outcome.parseStatus,
       parseWarnings: outcome.parseWarnings,
+      geometry: outcome.geometry,
       sha256,
     };
     await withStore('readwrite', (store) => store.put(record));
@@ -328,6 +336,7 @@ export const kmzStore: KmzStore = {
         centroid: record.centroid,
         parseStatus: record.parseStatus,
         parseWarnings: record.parseWarnings,
+        geometry: record.geometry ?? null,
       });
     }
 
@@ -412,6 +421,7 @@ export const kmzStore: KmzStore = {
         centroid: entry.centroid,
         parseStatus: entry.parseStatus,
         parseWarnings: entry.parseWarnings,
+        geometry: entry.geometry ?? null,
         sha256: entry.sha256,
       };
       await withStore('readwrite', (store) => store.put(record));

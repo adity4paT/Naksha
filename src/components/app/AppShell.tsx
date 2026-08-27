@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { FilterPanel, useUrlSync } from '@/components/filters';
-import { KmzBulkPanel } from '@/components/kmz';
+import { EarthProHint, KmzBulkPanel, useSurveyedSites } from '@/components/kmz';
 import { MapDashboard } from '@/components/map';
 import { UploadFlow } from '@/components/upload';
 import { DataTable } from '@/components/views/DataTable';
@@ -23,6 +23,7 @@ import { TopRegionsChart } from '@/components/views/TopRegionsChart';
 import { buildExportWorkbook, exportFileName } from '@/lib/export';
 import type { AliasMap, BoundaryIndex } from '@/lib/geo';
 import { loadAliasMap, loadBoundaryIndex } from '@/lib/geo';
+import type { ParsedRecord } from '@/types/schema';
 import { useDatasetStore } from '@/store/dataset';
 import { focusedState, useFilterStore } from '@/store/filters';
 import { useKmzStore } from '@/store/kmz';
@@ -42,6 +43,9 @@ type BoundaryLoad =
   | { readonly status: 'failed'; readonly message: string };
 
 type Tab = 'chart' | 'table';
+
+/** Stable identity, so the surveyed-site derivation does not rerun each render. */
+const EMPTY_RECORDS: readonly ParsedRecord[] = [];
 
 export function AppShell() {
   const [boundaries, setBoundaries] = useState<BoundaryLoad>({ status: 'loading' });
@@ -73,6 +77,16 @@ export function AppShell() {
   const unmappedOpen = useFilterStore((s) => s.unmappedPanelOpen);
 
   const derived = useDerivedData('light');
+
+  /**
+   * Surveyed sites, derived once here and passed down.
+   *
+   * Computed in the shell rather than inside the map for the same reason the
+   * aggregation is: the coverage line, the legend counts and the markers must
+   * come from one derivation, or they will disagree about how many sites are
+   * surveyed and nothing on screen will be authoritative.
+   */
+  const coverage = useSurveyedSites(workbook?.records ?? EMPTY_RECORDS, binding);
 
   /* ---- attachments, read once on mount ---------------------------------- */
   const refreshKmz = useKmzStore((s) => s.refresh);
@@ -206,6 +220,7 @@ export function AppShell() {
       <MapDashboard
         boundaries={boundaries.index}
         aggregation={derived.aggregation}
+        coverage={coverage}
         scale={derived.scale}
         ramp={derived.ramp}
         level={derived.level}
@@ -282,6 +297,14 @@ export function AppShell() {
           )}
         </div>
       </header>
+
+      {/*
+        One-time, app-level. Raised the first time a boundary is downloaded,
+        because a user without Google Earth Pro otherwise gets a file that
+        appears to do nothing — which reads as the app being broken rather than
+        as a missing application.
+      */}
+      <EarthProHint />
 
       {/* ---- upload drawer ---- */}
       {uploadOpen && (

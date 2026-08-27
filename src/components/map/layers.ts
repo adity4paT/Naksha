@@ -40,6 +40,8 @@ export const SOURCES = {
   districts: 'boundaries-districts',
   /** Point source carrying one feature per district that has sites. */
   siteBadges: 'site-badges',
+  /** Polygon source carrying one feature per site with a parsed KMZ. */
+  surveyed: 'surveyed-boundaries',
 } as const;
 
 /** Layer ids, stable so tests and event handlers can reference them. */
@@ -51,7 +53,18 @@ export const LAYER_IDS = {
   districtOutline: 'district-outline',
   districtSelected: 'district-selected',
   siteBadge: 'site-badge',
+  surveyedOutline: 'surveyed-outline',
 } as const;
+
+/**
+ * Zoom at which surveyed outlines appear.
+ *
+ * A parcel is a few hundred metres across. Below this it is a speck that adds
+ * nothing but a smudge over the choropleth, and drawing 130 of them at national
+ * zoom costs frames for no information. MapLibre enforces the threshold itself
+ * via the layer's `minzoom`, so there is no visibility logic in the component.
+ */
+export const SURVEYED_OUTLINE_MIN_ZOOM = 10;
 
 /**
  * What a registered layer is, independent of MapLibre's own typing.
@@ -316,7 +329,35 @@ export function buildLayers(context: LayerBuildContext): readonly RegisteredLaye
     },
   ];
 
-  // V2 appends here. `order` above 80 puts surveyed polygons over everything.
+  /**
+   * Surveyed boundary outlines.
+   *
+   * The V2 layer this registry was built to accommodate, appended exactly as
+   * the module doc predicted: one entry, no restructuring of the map component.
+   *
+   * Outline only — no fill. A filled parcel would read as another choropleth
+   * class and compete with the district shading underneath, which is the data
+   * the map exists to show. An outline says "this exact shape was surveyed"
+   * without claiming a value.
+   */
+  layers.push({
+    id: LAYER_IDS.surveyedOutline,
+    renderer: 'maplibre',
+    kind: 'surveyed-polygon',
+    order: 80,
+    visible: true,
+    interactive: false,
+    spec: {
+      id: LAYER_IDS.surveyedOutline,
+      type: 'line',
+      source: SOURCES.surveyed,
+      minzoom: SURVEYED_OUTLINE_MIN_ZOOM,
+      paint: {
+        'line-color': chrome.highlight,
+        'line-width': 1.6,
+      },
+    },
+  });
 
   return layers.sort((a, b) => a.order - b.order);
 }

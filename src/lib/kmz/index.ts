@@ -28,6 +28,26 @@ export type {
   MatchOptions,
 } from './match';
 
+export {
+  downloadNameFor,
+  earthWebUrlFor,
+  extensionOf,
+  mimeFor,
+  sanitizeFilename,
+  showKmz,
+  EARTH_PRO_URL,
+  KML_MIME,
+  KMZ_MIME,
+} from './download';
+export type { ShowKmzResult } from './download';
+
+export {
+  dismissEarthProHint,
+  earthProHintDismissed,
+  earthWebConsented,
+  grantEarthWebConsent,
+} from './consent';
+
 export { expandDroppedFiles } from './bulk';
 export type { DroppedKmzFile, ExpandResult, SkippedDrop } from './bulk';
 

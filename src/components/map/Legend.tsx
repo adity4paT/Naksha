@@ -34,6 +34,10 @@ export interface LegendProps {
   readonly hasNoDataRegions: boolean;
   /** True when at least one visible region totals exactly zero. */
   readonly hasZeroRegions: boolean;
+  /** Sites plotted from a surveyed KMZ boundary. */
+  readonly surveyedCount: number;
+  /** Sites known only to the district level, with no surveyed position. */
+  readonly districtOnlyCount: number;
 }
 
 export function Legend({
@@ -47,6 +51,8 @@ export function Legend({
   onMethodChange,
   hasNoDataRegions,
   hasZeroRegions,
+  surveyedCount,
+  districtOnlyCount,
 }: LegendProps) {
   const rows = useMemo(
     () =>
@@ -127,6 +133,53 @@ export function Legend({
           </li>
         )}
       </ul>
+
+      {/*
+        Site symbols, kept visually separate from the choropleth classes above
+        because they answer a different question. The classes say how much;
+        these say how precisely we know where.
+
+        The distinction between the two rows is the point of the whole section.
+        A district badge is an ADMINISTRATIVE fact — these sites are somewhere
+        in this district — and a marker is a SURVEYED one. Rendering them in a
+        way that let a reader mistake the first for the second would put
+        invented precision on the map, which is the failure V1 refused a site
+        marker entirely to avoid.
+      */}
+      {(surveyedCount > 0 || districtOnlyCount > 0) && (
+        <div className="mt-3 border-t border-slate-200 pt-2 dark:border-neutral-800">
+          <p className="mb-1.5 font-medium text-slate-600 dark:text-neutral-300">Sites</p>
+          <ul className="flex flex-col gap-1.5">
+            {surveyedCount > 0 && (
+              <li className="flex items-start gap-2">
+                <span
+                  aria-hidden="true"
+                  className="mt-0.5 h-2.5 w-2.5 shrink-0 rotate-45 rounded-[2px] border border-white bg-emerald-600 shadow-sm"
+                />
+                <span className="flex-1 text-slate-700 dark:text-neutral-300">
+                  <span className="tabular-nums">{surveyedCount}</span> surveyed —
+                  exact boundary from an uploaded KMZ, shown at zoom 10 and above.
+                </span>
+              </li>
+            )}
+            {districtOnlyCount > 0 && (
+              <li className="flex items-start gap-2">
+                <span
+                  aria-hidden="true"
+                  className="mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-slate-500 bg-white text-[7px] font-semibold text-slate-900 dark:border-neutral-400 dark:bg-neutral-900 dark:text-neutral-100"
+                >
+                  6
+                </span>
+                <span className="flex-1 text-slate-700 dark:text-neutral-300">
+                  <span className="tabular-nums">{districtOnlyCount}</span> district-level
+                  only — counted in the district badge. No surveyed position exists for
+                  these; the badge is not a location.
+                </span>
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
 
       {scale.reducedFrom !== undefined && (
         <p className="mt-2 text-[11px] text-slate-500 dark:text-neutral-400">

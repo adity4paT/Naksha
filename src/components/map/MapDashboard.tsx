@@ -14,6 +14,7 @@
 import dynamic from 'next/dynamic';
 import { useMemo } from 'react';
 
+import type { SurveyedCoverage } from '@/components/kmz';
 import type { AggregationResult } from '@/lib/aggregate';
 import type { BinnedScale, ColorMode } from '@/lib/color';
 import type { BoundaryIndex } from '@/lib/geo';
@@ -29,6 +30,7 @@ import {
 import { Breadcrumb } from './Breadcrumb';
 import { Legend } from './Legend';
 import { MeasurePicker } from './MeasurePicker';
+import { KmzCoverage } from './KmzCoverage';
 import { UnmappedPanel } from './UnmappedPanel';
 
 const MapView = dynamic(() => import('./MapView').then((m) => m.MapView), {
@@ -50,6 +52,8 @@ export interface MapDashboardProps {
    * second query path that makes views disagree.
    */
   readonly aggregation: AggregationResult;
+  /** Surveyed sites and the coverage counts, derived once by the shell. */
+  readonly coverage: SurveyedCoverage;
   readonly scale: BinnedScale;
   readonly ramp: readonly string[];
   readonly level: MapLevel;
@@ -65,6 +69,7 @@ export interface MapDashboardProps {
 export function MapDashboard({
   boundaries,
   aggregation,
+  coverage,
   scale,
   ramp,
   level,
@@ -153,6 +158,7 @@ export function MapDashboard({
             onSelectDistrict={focusDistrict}
             onZoomChange={setZoom}
             onOpenSiteList={openSiteList}
+            surveyedSites={coverage.sites}
           />
         </div>
 
@@ -179,6 +185,8 @@ export function MapDashboard({
             onMethodChange={setBinningMethod}
             hasNoDataRegions={hasNoData}
             hasZeroRegions={hasZero}
+            surveyedCount={coverage.sites.length}
+            districtOnlyCount={Math.max(0, coverage.totalSites - coverage.sites.length)}
           />
         </aside>
       </div>
@@ -187,6 +195,14 @@ export function MapDashboard({
         Always rendered. Never conditional on there being unmapped records — a
         panel that disappears when empty trains users to stop looking for it.
       */}
+      {/*
+        Coverage sits beside the unmapped panel because the two are the same
+        kind of statement — how much of the data the map can actually place, and
+        how precisely. Reading them apart would let someone conclude every site
+        is surveyed because the ones they happened to click were.
+      */}
+      <KmzCoverage coverage={coverage} />
+
       <UnmappedPanel
         entries={aggregation.unmapped}
         mappedTotal={aggregation.mappedTotal}

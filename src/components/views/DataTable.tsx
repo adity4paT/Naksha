@@ -17,7 +17,7 @@
 
 import { useMemo, useState } from 'react';
 
-import { KmzUploadButton } from '@/components/kmz';
+import { KmzSiteActions } from '@/components/kmz';
 import { siteKeyForRecord, siteLabelForRecord } from '@/lib/kmz';
 import type { SiteKeyColumns } from '@/lib/kmz';
 import { formatMeasureValue } from '@/lib/measures';
@@ -188,7 +188,7 @@ export function DataTable({
                   );
                 })}
                 <td className="whitespace-nowrap border-b border-stone-100 px-2 py-1">
-                  <KmzUploadButton
+                  <KmzSiteActions
                     siteKey={siteKeyForRecord(record, siteColumns)}
                     siteLabel={siteLabelForRecord(record, siteColumns)}
                     compact

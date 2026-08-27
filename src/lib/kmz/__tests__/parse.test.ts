@@ -191,3 +191,56 @@ describe('validity', () => {
     expect(result.placemarkCount).toBe(1);
   });
 });
+
+describe('cached geometry', () => {
+  it('returns the polygon for the outline layer', async () => {
+    const file = await makeKmz({ 'doc.kml': kmlWithPolygon(SQUARE_COORDS) });
+    const { geometry } = await parseKmz(file, 'plot.kmz', opts);
+
+    expect(geometry).not.toBeNull();
+    expect(geometry?.type).toBe('Polygon');
+  });
+
+  it('caches the CORRECTED geometry when the swap was applied', async () => {
+    const file = await makeKmz({ 'doc.kml': kmlWithPolygon(SWAPPED_COORDS) });
+    const { geometry } = await parseKmz(file, 'plot.kmz', {
+      ...opts,
+      swapCoordinates: true,
+    });
+
+    // The outline must be drawn from the fixed coordinates, not the originals —
+    // otherwise the marker sits in India and its boundary sits in the ocean.
+    const ring = (geometry as { coordinates: number[][][] }).coordinates[0] as number[][];
+    for (const position of ring) {
+      const [lng, lat] = position as [number, number];
+      expect(lng).toBeGreaterThanOrEqual(INDIA_BOUNDS.minLng);
+      expect(lng).toBeLessThanOrEqual(INDIA_BOUNDS.maxLng);
+      expect(lat).toBeGreaterThanOrEqual(INDIA_BOUNDS.minLat);
+      expect(lat).toBeLessThanOrEqual(INDIA_BOUNDS.maxLat);
+    }
+  });
+
+  it('keeps every Placemark when a parcel is split across several', async () => {
+    const twoPlacemarks = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+  <Placemark><Polygon><outerBoundaryIs><LinearRing><coordinates>
+    ${SQUARE_COORDS}
+  </coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>
+  <Placemark><Polygon><outerBoundaryIs><LinearRing><coordinates>
+    77,20,0 78,20,0 78,21,0 77,21,0 77,20,0
+  </coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>
+</Document></kml>`;
+    const file = await makeKmz({ 'doc.kml': twoPlacemarks });
+    const result = await parseKmz(file, 'split.kmz', opts);
+
+    expect(result.placemarkCount).toBe(2);
+    // Collapsing to the first would render half a parcel, which is worse than
+    // rendering none.
+    expect(result.geometry?.type).toBe('GeometryCollection');
+  });
+
+  it('has no geometry when the file could not be read', async () => {
+    const file = await makeKmz({ 'doc.kml': kmlWithoutGeometry });
+    expect((await parseKmz(file, 'plot.kmz', opts)).geometry).toBeNull();
+  });
+});

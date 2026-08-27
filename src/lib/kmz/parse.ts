@@ -98,6 +98,18 @@ export interface KmzParseResult {
   /** Archive entry the geometry came from; null for a bare .kml upload. */
   readonly kmlEntryName: string | null;
   /**
+   * The parsed geometry, for drawing the boundary outline.
+   *
+   * A DERIVED CACHE, never a substitute for the stored bytes. It exists so the
+   * map can draw 130 outlines without re-opening 130 archives on every render.
+   * A download still reads the original Blob — see the store module doc.
+   *
+   * Several Placemarks collapse into a GeometryCollection rather than being
+   * dropped to the first: a parcel split across two polygons is one parcel, and
+   * rendering half of it would be worse than rendering none.
+   */
+  readonly geometry: Geometry | null;
+  /**
    * True when coordinates fell out of range but land inside it when
    * transposed. The UI offers a swap toggle on this rather than a generic
    * failure, because lon,lat order is the single most common KML defect.
@@ -203,7 +215,17 @@ const unparseable = (
   placemarkCount: 0,
   kmlEntryName,
   suspectedCoordinateSwap,
+  geometry: null,
 });
+
+/** Collapse the features into one geometry for the outline layer. */
+function collectGeometry(features: readonly Feature<Geometry>[]): Geometry | null {
+  const geometries = features.map((feature) => feature.geometry);
+  const first = geometries[0];
+  if (first === undefined) return null;
+  if (geometries.length === 1) return first;
+  return { type: 'GeometryCollection', geometries };
+}
 
 /** Read the KML text out of a .kmz archive or a bare .kml file. */
 async function readKmlText(
@@ -386,5 +408,8 @@ export async function parseKmz(
     placemarkCount: withGeometry.length,
     kmlEntryName: source.entryName,
     suspectedCoordinateSwap,
+    // `features`, not `withGeometry`: when the swap was applied, the outline
+    // must be drawn from the corrected coordinates, not the originals.
+    geometry: collectGeometry(features),
   };
 }
