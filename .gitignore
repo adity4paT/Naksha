@@ -41,6 +41,15 @@ yarn-error.log*
 *.kmz
 !Dummy land mis.xlsx
 
+# Synthetic KMZ fixtures only.
+#
+# Narrow by design. The negation names a fixed filename prefix inside one
+# directory, never the directory itself: a real surveyed KMZ dropped anywhere in
+# the tree — including into tests/fixtures/ — stays ignored unless someone
+# deliberately names it synthetic-*. Widening this to `!tests/fixtures/` would
+# turn one careless `git add` into a confidentiality breach.
+!tests/fixtures/synthetic-*.kmz
+
 # geo build scratch (downloaded source, not committed)
 /.geo-build/
 

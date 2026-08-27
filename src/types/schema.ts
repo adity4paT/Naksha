@@ -15,10 +15,20 @@
  *     {@link LocationResult} and {@link AreaFigure} are declared as their full
  *     V1+V2 unions so every consumer writes an exhaustive switch today. The
  *     V2 arms are real members of the union — reachable to a reader, checked by
- *     the compiler — but no V1 producer can construct one, because V1 producers
- *     are typed to return the narrowed {@link V1LocationResult} /
- *     {@link V1AreaFigure} aliases. Adding V2 means widening one producer
- *     signature. It does not mean touching consumers.
+ *     the compiler — so adding V2 means widening one producer signature. It
+ *     does not mean touching consumers.
+ *
+ *     The location seam has now been used. Per-site KMZ attachment landed in V2
+ *     on 2026-08-27 and {@link V1LocationResult} was widened to the full union.
+ *     The prediction held exactly: widening the producer alias was the entire
+ *     type change, and no consumer needed editing, because every consumer has
+ *     been switching exhaustively on `source` since V1.
+ *
+ *     The area seam stays closed. {@link V1AreaFigure} remains narrowed because
+ *     CLAUDE.md's "do NOT compute or display parcel area from geometry" rule
+ *     outlives the KMZ upload — holding a surveyed polygon is not permission to
+ *     measure it. Widening that seam needs its own decision, not this one's
+ *     momentum.
  */
 
 import type { Feature, MultiPolygon, Point, Polygon } from 'geojson';
@@ -47,6 +57,30 @@ export type NormalizedKey = Brand<string, 'NormalizedKey'>;
 
 /** Stable per-row identity, assigned at parse time. Not the sheet's `Sr No`. */
 export type RecordId = Brand<string, 'RecordId'>;
+
+/**
+ * Durable identity for one site, stable across re-uploads of the workbook.
+ *
+ * Deliberately NOT a {@link RecordId}. A `RecordId` is `row-<n>` — a position in
+ * the sheet. That is correct for joining a parse to its own resolutions within a
+ * single session, and unusable for anything that outlives the file: insert one
+ * row near the top of the workbook and every `RecordId` below it now names a
+ * different parcel.
+ *
+ * The distinction is load-bearing for KMZ attachments, which are stored per site
+ * and are meant to survive re-uploads. Keyed positionally, a single inserted row
+ * would silently rebind every surveyed boundary below it to the wrong parcel —
+ * the map would look correct and be wrong, on confidential land-holding data,
+ * with nothing on screen to indicate the shift. So a `SiteKey` is derived from
+ * content (normalized state, district and site name), never from row order.
+ *
+ * Note the collision with `DatasetBinding.siteKey`, which is a
+ * {@link NormalizedKey} naming the *column* that holds site names. Two different
+ * ideas sharing a word: that one selects a column, this one identifies a row's
+ * subject. Renaming the column selector to `siteNameColumn` would end the
+ * ambiguity and is worth doing separately.
+ */
+export type SiteKey = Brand<string, 'SiteKey'>;
 
 /**
  * An administrative name exactly as it appears in the vendored GeoJSON.
@@ -560,11 +594,16 @@ export interface AdminBoundaryLocation extends LocationResultBase {
 }
 
 /**
- * V2 only: geometry from an uploaded KMZ.
+ * Geometry from an uploaded KMZ.
  *
- * Present in the {@link LocationResult} union so consumers handle it today.
- * Nothing in V1 constructs one — the KMZ column exists in the sheet but is
- * empty, and CLAUDE.md says not to build against it yet.
+ * No longer fenced off: as of 2026-08-27 {@link V1LocationResult} admits this
+ * arm, so a producer may construct one. Nothing does yet — phase one of the KMZ
+ * work stores original bytes and deliberately does not parse them — but the type
+ * is now reachable rather than reserved.
+ *
+ * One thing that did not change: the sheet's `KMZ Files` column stays unused.
+ * Attachments are uploaded per site through `src/lib/kmz` and keyed by
+ * {@link SiteKey}; they are not read out of a spreadsheet cell.
  */
 export interface SurveyedLocation extends LocationResultBase {
   readonly precision: 'surveyed-polygon';
@@ -583,8 +622,15 @@ export interface SurveyedLocation extends LocationResultBase {
  */
 export type LocationResult = AdminBoundaryLocation | SurveyedLocation;
 
-/** What V1 code may construct. Accept {@link LocationResult}; return this. */
-export type V1LocationResult = Extract<LocationResult, { source: 'admin-boundary' }>;
+/**
+ * What a producer may construct. As of V2 this is the full union.
+ *
+ * Kept as a distinct name rather than inlined, so the guards below have a
+ * subject and so the commit that widened it stays greppable. The `V1` prefix is
+ * now a misnomer; renaming to `ProducedLocation` is a safe follow-up, since the
+ * alias has no consumers outside this file.
+ */
+export type V1LocationResult = LocationResult;
 
 /* -------------------------------------------------------------------------- */
 /* Resolver cascade                                                            */
@@ -694,17 +740,30 @@ export interface MapLayerRegistration {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Compile-time proof that the V2 arms are real union members and the V1 aliases
- * genuinely exclude them. If someone later collapses the unions to a single
- * variant, or widens `V1LocationResult` to admit KMZ, one of these fails to
- * compile and the seam's loss is caught at build time rather than in review.
+ * Compile-time proof that each seam is in the state we believe it is in.
+ *
+ * These are tripwires, not tests. Each one fails the build if a later edit
+ * quietly changes what a union admits, so a seam cannot be lost inside a diff
+ * that reads like a refactor. Two still guard a closed seam (area); one now
+ * guards an open one (location).
+ *
+ * `_LocationProducerAdmitsKmz` replaced `_V1LocationExcludesKmz` on 2026-08-27,
+ * when per-site KMZ attachment landed in V2. The original assertion existed to
+ * force precisely this decision to be taken deliberately rather than drifted
+ * into, so it was inverted rather than removed: where it once proved the
+ * producer alias excluded KMZ, it now proves the alias admits
+ * {@link SurveyedLocation}. It fails if anyone narrows `V1LocationResult` back —
+ * which would strip surveyed geometry out of the pipeline while every consumer's
+ * exhaustive switch still compiled, silently regressing every affected site to a
+ * district centroid. That is precisely the failure this guard exists to make
+ * loud.
  */
 type Assert<T extends true> = T;
 type Equals<A, B> = (<G>() => G extends A ? 1 : 2) extends <G>() => G extends B ? 1 : 2
   ? true
   : false;
 
-export type _V1LocationExcludesKmz = Assert<Equals<V1LocationResult, AdminBoundaryLocation>>;
+export type _LocationProducerAdmitsKmz = Assert<Equals<V1LocationResult, LocationResult>>;
 export type _V2LocationArmExists = Assert<
   Equals<Extract<LocationResult, { source: 'kmz' }>, SurveyedLocation>
 >;
